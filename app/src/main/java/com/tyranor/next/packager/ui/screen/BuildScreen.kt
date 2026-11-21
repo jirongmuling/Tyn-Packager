@@ -71,6 +71,7 @@ fun BuildScreen(
     onBuild: () -> Unit,
     onInstall: (File) -> Unit,
     onShare: (File) -> Unit,
+    onExport: (File) -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -135,7 +136,7 @@ fun BuildScreen(
                 Text(if (state.building) "制作中…" else "生成直装包")
             }
 
-            state.result?.let { ResultCard(it, onInstall, onShare) }
+            state.result?.let { ResultCard(it, onInstall, onShare, onExport) }
 
             Spacer(Modifier.height(24.dp))
         }
@@ -430,6 +431,7 @@ private fun ResultCard(
     result: BuildResult,
     onInstall: (File) -> Unit,
     onShare: (File) -> Unit,
+    onExport: (File) -> Unit,
 ) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
@@ -458,6 +460,7 @@ private fun ResultCard(
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Button(onClick = { onInstall(result.apk) }) { Text("安装") }
                         OutlinedButton(onClick = { onShare(result.apk) }) { Text("分享") }
+                        OutlinedButton(onClick = { onExport(result.apk) }) { Text("导出") }
                     }
                 }
                 is BuildResult.Failure -> {

@@ -14,6 +14,8 @@ import com.tyranor.next.packager.apk.IconSize
 import com.tyranor.next.packager.apk.InstallerBuilder
 import com.tyranor.next.packager.cover.CoverCandidate
 import com.tyranor.next.packager.cover.CoverFetcher
+import com.tyranor.next.packager.data.BuildHistoryEntry
+import com.tyranor.next.packager.data.BuildHistoryStore
 import com.tyranor.next.packager.data.TyranorGame
 import com.tyranor.next.packager.sign.KeystoreEntry
 import com.tyranor.next.packager.sign.SigningKey
@@ -325,6 +327,23 @@ class BuildViewModel(app: Application) : AndroidViewModel(app) {
                         signingKey = key,
                     ),
                 )
+            }
+
+            // 成功后写入历史
+            if (result is BuildResult.Success) {
+                withContext(Dispatchers.IO) {
+                    BuildHistoryStore(getApplication()).append(
+                        BuildHistoryEntry(
+                            fileName = result.apk.name,
+                            packageName = s.packageName,
+                            appLabel = s.appLabel,
+                            gameTitle = game.title,
+                            createdAt = System.currentTimeMillis(),
+                            sizeBytes = result.apk.length(),
+                            customSigned = s.useCustomSigning,
+                        ),
+                    )
+                }
             }
 
             _state.value = _state.value.copy(building = false, result = result)

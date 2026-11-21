@@ -34,12 +34,14 @@ fun HomeScreen(
     onRefresh: () -> Unit,
     onRequestAllFilesAccess: () -> Unit,
     onSelectGame: (com.tyranor.next.packager.data.TyranorGame) -> Unit,
+    onOpenHistory: () -> Unit,
 ) {
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Tyn Packager") },
                 actions = {
+                    TextButton(onClick = onOpenHistory) { Text("历史") }
                     TextButton(onClick = onRefresh) { Text("刷新") }
                 },
             )
@@ -135,6 +137,7 @@ private fun EmptyBlock() {
 private fun GameList(
     state: HomeUiState,
     onSelectGame: (com.tyranor.next.packager.data.TyranorGame) -> Unit,
+    onOpenHistory: () -> Unit,
 ) {
     LazyColumn(
         contentPadding = PaddingValues(bottom = 24.dp),

@@ -21,12 +21,15 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.tyranor.next.packager.apk.ApkOutput
 import com.tyranor.next.packager.ui.screen.BuildScreen
+import com.tyranor.next.packager.ui.screen.HistoryScreen
 import com.tyranor.next.packager.ui.screen.HomeScreen
 import com.tyranor.next.packager.ui.theme.TynPackagerTheme
 
 /** 简易页面栈：首页 → 打包页。 */
 private sealed interface Screen {
+    data object Onboarding : Screen
     data object Home : Screen
+    data object History : Screen
     data class Build(val gameUri: String) : Screen
 }
 
@@ -65,15 +68,30 @@ private fun AppRoot(onRequestAllFilesAccess: () -> Unit) {
     val homeVm: HomeViewModel = viewModel()
     val homeState by homeVm.state.collectAsStateWithLifecycle()
 
-    var screen by remember { mutableStateOf<Screen>(Screen.Home) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val onboarding = remember { com.tyranor.next.packager.data.OnboardingStore(context) }
+    var screen by remember {
+        mutableStateOf<Screen>(if (onboarding.isDone()) Screen.Home else Screen.Onboarding)
+    }
 
     when (val current = screen) {
+        is Screen.Onboarding -> com.tyranor.next.packager.ui.screen.OnboardingScreen(
+            onDone = {
+                onboarding.markDone()
+                screen = Screen.Home
+            },
+            onRequestAllFilesAccess = onRequestAllFilesAccess,
+        )
+
         is Screen.Home -> HomeScreen(
             state = homeState,
             onRefresh = homeVm::refresh,
             onRequestAllFilesAccess = onRequestAllFilesAccess,
             onSelectGame = { game -> screen = Screen.Build(game.uri) },
+            onOpenHistory = { screen = Screen.History },
         )
+
+        is Screen.History -> HistoryRoute(onBack = { screen = Screen.Home })
 
         is Screen.Build -> BuildRoute(
             gameUri = current.gameUri,
@@ -81,6 +99,48 @@ private fun AppRoot(onRequestAllFilesAccess: () -> Unit) {
             onBack = { screen = Screen.Home },
         )
     }
+}
+
+@Composable
+private fun HistoryRoute(onBack: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val historyVm: HistoryViewModel = viewModel()
+    val state by historyVm.state.collectAsStateWithLifecycle()
+
+    androidx.compose.runtime.LaunchedEffect(Unit) { historyVm.refresh() }
+
+    HistoryScreen(
+        state = state,
+        onBack = onBack,
+        onRefresh = historyVm::refresh,
+        onDelete = historyVm::delete,
+        onClearAll = historyVm::clearAll,
+        onInstall = { entry ->
+            ApkOutput.install(context, entry.apkFile(context)).onFailure {
+                android.widget.Toast
+                    .makeText(context, "无法安装：${it.message}", android.widget.Toast.LENGTH_LONG)
+                    .show()
+            }
+        },
+        onShare = { entry ->
+            ApkOutput.share(context, entry.apkFile(context)).onFailure {
+                android.widget.Toast
+                    .makeText(context, "无法分享：${it.message}", android.widget.Toast.LENGTH_LONG)
+                    .show()
+            }
+        },
+        onExport = { entry -> exportApk(context, entry.apkFile(context)) },
+    )
+}
+
+/** 导出到下载目录并提示结果。 */
+private fun exportApk(context: android.content.Context, apk: java.io.File) {
+    val ok = ApkOutput.exportToDownloads(context, apk) != null
+    android.widget.Toast.makeText(
+        context,
+        if (ok) "已导出到下载目录" else "导出失败",
+        android.widget.Toast.LENGTH_LONG,
+    ).show()
 }
 
 @Composable
@@ -169,5 +229,6 @@ private fun BuildRoute(
                     .show()
             }
         },
+        onExport = { apk -> exportApk(context, apk) },
     )
 }

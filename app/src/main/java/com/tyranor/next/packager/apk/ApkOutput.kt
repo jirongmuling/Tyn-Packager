@@ -13,6 +13,8 @@ import java.io.File
  */
 object ApkOutput {
 
+    private const val APK_MIME = "application/vnd.android.package-archive"
+
     /**
      * 调起系统安装器安装 APK。
      *
@@ -42,6 +44,41 @@ object ApkOutput {
             Intent.createChooser(intent, "分享 APK").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
     }
+
+    /**
+     * 导出到系统「下载」目录，方便用文件管理器查找或传给别人。
+     *
+     * 使用 MediaStore，无需任何存储权限，Android 10+ 通用；
+     * 同名文件会自动追加序号。
+     *
+     * @return 导出后的文件路径；失败返回 null
+     */
+    fun exportToDownloads(context: Context, apk: File): String? = runCatching {
+        require(apk.isFile) { "APK 不存在" }
+
+        val resolver = context.contentResolver
+        val values = android.content.ContentValues().apply {
+            put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, apk.name)
+            put(android.provider.MediaStore.MediaColumns.MIME_TYPE, APK_MIME)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                put(
+                    android.provider.MediaStore.MediaColumns.RELATIVE_PATH,
+                    android.os.Environment.DIRECTORY_DOWNLOADS,
+                )
+            }
+        }
+
+        val uri = resolver.insert(
+            android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            values,
+        ) ?: return null
+
+        resolver.openOutputStream(uri)?.use { out ->
+            apk.inputStream().use { input -> input.copyTo(out) }
+        } ?: return null
+
+        uri.toString()
+    }.getOrNull()
 
     private fun uriFor(context: Context, apk: File): Uri =
         FileProvider.getUriForFile(
