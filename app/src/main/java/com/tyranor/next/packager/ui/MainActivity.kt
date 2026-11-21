@@ -107,6 +107,15 @@ private fun BuildRoute(
         pendingIcon = null
     }
 
+    // keystore 选择：任意文件
+    var pendingKeystore by remember { mutableStateOf<((Uri) -> Unit)?>(null) }
+    val keystorePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent(),
+    ) { uri ->
+        if (uri != null) pendingKeystore?.invoke(uri)
+        pendingKeystore = null
+    }
+
     BuildScreen(
         state = state,
         onBack = onBack,
@@ -120,6 +129,31 @@ private fun BuildRoute(
         onIconSizeChange = buildVm::setIconSize,
         onFetchCover = buildVm::fetchCovers,
         onApplyCover = buildVm::applyCoverCandidate,
+        onUseCustomSigning = buildVm::setUseCustomSigning,
+        onPickKeystore = {
+            pendingKeystore = { uri ->
+                // 复制到应用私有目录，避免 SAF 授权失效
+                val dst = java.io.File(
+                    context.filesDir,
+                    "keystore/" + (uri.lastPathSegment?.substringAfterLast('/') ?: "imported.p12"),
+                )
+                runCatching {
+                    dst.parentFile?.mkdirs()
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        dst.outputStream().use { output -> input.copyTo(output) }
+                    }
+                }.onSuccess { buildVm.setKeystoreFile(dst.absolutePath) }
+                    .onFailure {
+                        android.widget.Toast.makeText(
+                            context, "无法读取 keystore", android.widget.Toast.LENGTH_LONG,
+                        ).show()
+                    }
+            }
+            keystorePicker.launch("*/*")
+        },
+        onKeystorePasswordChange = buildVm::setKeystorePassword,
+        onKeystoreAliasChange = buildVm::setKeystoreAlias,
+        onVerifyKeystore = buildVm::verifyKeystore,
         onBuild = buildVm::build,
         onInstall = { apk ->
             ApkOutput.install(context, apk).onFailure {

@@ -1,7 +1,6 @@
 package com.tyranor.next.packager.sign
 
 import java.io.File
-import java.security.KeyStore
 import java.security.PrivateKey
 import java.security.cert.X509Certificate
 
@@ -35,46 +34,4 @@ sealed interface SigningSource {
         val keyPassword: CharArray? = null,
         val alias: String? = null,
     ) : SigningSource
-}
-
-/** 从 keystore 读取密钥材料。 */
-object KeystoreReader {
-
-    /**
-     * 读取 [SigningSource.Keystore] 中的私钥与证书链。
-     *
-     * @throws IllegalArgumentException keystore 无法打开或找不到带私钥的条目
-     */
-    fun read(source: SigningSource.Keystore): SigningKey {
-        val type = detectType(source.file)
-        val store = KeyStore.getInstance(type).apply {
-            source.file.inputStream().use { load(it, source.storePassword) }
-        }
-
-        val alias = source.alias
-            ?: store.aliases().toList().firstOrNull { store.isKeyEntry(it) }
-            ?: throw IllegalArgumentException("keystore 中没有带私钥的条目")
-
-        val keyPassword = source.keyPassword ?: source.storePassword
-        val key = store.getKey(alias, keyPassword) as? PrivateKey
-            ?: throw IllegalArgumentException("别名 $alias 不是私钥条目")
-
-        val chain = store.getCertificateChain(alias)
-            ?.filterIsInstance<X509Certificate>()
-            .orEmpty()
-            .ifEmpty {
-                listOfNotNull(store.getCertificate(alias) as? X509Certificate)
-            }
-        require(chain.isNotEmpty()) { "别名 $alias 没有证书链" }
-
-        return SigningKey(alias = alias, privateKey = key, certificates = chain)
-    }
-
-    /** 按扩展名/魔数判断 keystore 类型。 */
-    private fun detectType(file: File): String = when (file.extension.lowercase()) {
-        "p12", "pfx", "pkcs12" -> "PKCS12"
-        "jks" -> "JKS"
-        "bks" -> "BKS"
-        else -> "PKCS12"
-    }
 }

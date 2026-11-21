@@ -63,6 +63,11 @@ fun BuildScreen(
     onIconSizeChange: (IconSize) -> Unit,
     onFetchCover: () -> Unit,
     onApplyCover: (CoverCandidate) -> Unit,
+    onUseCustomSigning: (Boolean) -> Unit,
+    onPickKeystore: () -> Unit,
+    onKeystorePasswordChange: (String) -> Unit,
+    onKeystoreAliasChange: (String) -> Unit,
+    onVerifyKeystore: () -> Unit,
     onBuild: () -> Unit,
     onInstall: (File) -> Unit,
     onShare: (File) -> Unit,
@@ -99,7 +104,14 @@ fun BuildScreen(
                 onFetchCover = onFetchCover,
                 onApplyCover = onApplyCover,
             )
-            SigningInfoCard()
+            SigningCard(
+                state = state,
+                onUseCustom = onUseCustomSigning,
+                onPickKeystore = onPickKeystore,
+                onPasswordChange = onKeystorePasswordChange,
+                onAliasChange = onKeystoreAliasChange,
+                onVerify = onVerifyKeystore,
+            )
 
             OutlinedTextField(
                 value = state.sourceApkPath,
@@ -309,16 +321,90 @@ private fun IconCard(
 }
 
 @Composable
-private fun SigningInfoCard() {
+private fun SigningCard(
+    state: BuildUiState,
+    onUseCustom: (Boolean) -> Unit,
+    onPickKeystore: () -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onAliasChange: (String) -> Unit,
+    onVerify: () -> Unit,
+) {
     Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("签名", style = MaterialTheme.typography.labelMedium)
-            Spacer(Modifier.height(6.dp))
-            Text(
-                "当前使用测试签名（本机自签证书）。同一设备多次打包签名一致，可正常覆盖安装。",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (!state.useCustomSigning) {
+                    Button(onClick = { onUseCustom(false) }) { Text("测试签名") }
+                } else {
+                    OutlinedButton(onClick = { onUseCustom(false) }) { Text("测试签名") }
+                }
+                if (state.useCustomSigning) {
+                    Button(onClick = { onUseCustom(true) }) { Text("自定义签名") }
+                } else {
+                    OutlinedButton(onClick = { onUseCustom(true) }) { Text("自定义签名") }
+                }
+            }
+
+            if (!state.useCustomSigning) {
+                Text(
+                    "应用内生成的自签证书，保存在应用私有目录。同一设备多次打包签名一致，可正常覆盖安装。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                OutlinedButton(onClick = onPickKeystore, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        if (state.keystorePath.isBlank()) "选择 keystore 文件（.p12 / .jks）"
+                        else state.keystorePath.substringAfterLast('/'),
+                    )
+                }
+
+                OutlinedTextField(
+                    value = state.keystorePassword,
+                    onValueChange = onPasswordChange,
+                    label = { Text("keystore 密码") },
+                    singleLine = true,
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                Button(
+                    onClick = onVerify,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = state.keystorePath.isNotBlank() && state.keystorePassword.isNotEmpty(),
+                ) {
+                    Text(if (state.keystoreVerified) "已验证（点击重新校验）" else "校验 keystore")
+                }
+
+                state.keystoreError?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+
+                if (state.keystoreEntries.isNotEmpty()) {
+                    Text("签名条目", style = MaterialTheme.typography.labelSmall)
+                    state.keystoreEntries.forEach { entry ->
+                        val selected = state.keystoreAlias == entry.alias
+                        OutlinedButton(
+                            onClick = { onAliasChange(entry.alias) },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(Modifier.fillMaxWidth()) {
+                                Text(
+                                    (if (selected) "✓ " else "") + entry.alias,
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                                Text(
+                                    "${entry.keyAlgorithm} · ${entry.subject.take(48)}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

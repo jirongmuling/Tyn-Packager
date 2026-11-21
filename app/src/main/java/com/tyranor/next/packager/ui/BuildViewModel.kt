@@ -15,6 +15,10 @@ import com.tyranor.next.packager.apk.InstallerBuilder
 import com.tyranor.next.packager.cover.CoverCandidate
 import com.tyranor.next.packager.cover.CoverFetcher
 import com.tyranor.next.packager.data.TyranorGame
+import com.tyranor.next.packager.sign.KeystoreEntry
+import com.tyranor.next.packager.sign.SigningKey
+import com.tyranor.next.packager.sign.KeystoreProbe
+import com.tyranor.next.packager.sign.KeystoreReader
 import com.tyranor.next.packager.sign.TestSigningKeyProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -45,6 +49,14 @@ data class BuildUiState(
     val sourceApkPath: String = "",
     // 游戏目录体积（字节）；-1 表示尚未计算
     val gameDirSize: Long = -1L,
+    // 签名
+    val useCustomSigning: Boolean = false,
+    val keystorePath: String = "",
+    val keystorePassword: String = "",
+    val keystoreAlias: String = "",
+    val keystoreEntries: List<KeystoreEntry> = emptyList(),
+    val keystoreVerified: Boolean = false,
+    val keystoreError: String? = null,
     // 运行态
     val building: Boolean = false,
     val stage: BuildStage? = null,
@@ -57,7 +69,8 @@ data class BuildUiState(
             packageNameError == null &&
             packageName.isNotBlank() &&
             sourceApkPath.isNotBlank() &&
-            File(sourceApkPath).isFile
+            File(sourceApkPath).isFile &&
+            (!useCustomSigning || keystoreVerified)
 }
 
 class BuildViewModel(app: Application) : AndroidViewModel(app) {
@@ -191,6 +204,69 @@ class BuildViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** 切换签名方式。 */
+    fun setUseCustomSigning(custom: Boolean) {
+        _state.value = _state.value.copy(
+            useCustomSigning = custom,
+            keystoreError = null,
+        )
+    }
+
+    /** 选择 keystore 文件。 */
+    fun setKeystoreFile(path: String) {
+        _state.value = _state.value.copy(
+            keystorePath = path,
+            keystoreVerified = false,
+            keystoreEntries = emptyList(),
+            keystoreError = null,
+        )
+    }
+
+    fun setKeystorePassword(password: String) {
+        _state.value = _state.value.copy(
+            keystorePassword = password,
+            keystoreVerified = false,
+            keystoreError = null,
+        )
+    }
+
+    fun setKeystoreAlias(alias: String) {
+        _state.value = _state.value.copy(keystoreAlias = alias)
+    }
+
+    /** 校验 keystore：打开并列出可用条目。 */
+    fun verifyKeystore() {
+        val s = _state.value
+        val file = File(s.keystorePath)
+        if (!file.isFile) {
+            _state.value = s.copy(keystoreError = "请先选择 keystore 文件", keystoreVerified = false)
+            return
+        }
+        if (s.keystorePassword.isEmpty()) {
+            _state.value = s.copy(keystoreError = "请输入 keystore 密码", keystoreVerified = false)
+            return
+        }
+
+        viewModelScope.launch {
+            val probe = withContext(Dispatchers.IO) {
+                KeystoreReader.probe(file, s.keystorePassword.toCharArray())
+            }
+            _state.value = when (probe) {
+                is KeystoreProbe.Ok -> s.copy(
+                    keystoreVerified = true,
+                    keystoreEntries = probe.entries,
+                    keystoreAlias = probe.entries.firstOrNull()?.alias ?: "",
+                    keystoreError = null,
+                )
+                is KeystoreProbe.Error -> s.copy(
+                    keystoreVerified = false,
+                    keystoreEntries = emptyList(),
+                    keystoreError = probe.message,
+                )
+            }
+        }
+    }
+
     /** 开始构建。 */
     fun build() {
         val s = _state.value
@@ -213,8 +289,22 @@ class BuildViewModel(app: Application) : AndroidViewModel(app) {
                 File(packagerApp.outputDir, "$safeName-${System.currentTimeMillis()}.apk")
             }
 
-            val result = withContext(Dispatchers.IO) {
-                val key = TestSigningKeyProvider.get(getApplication<Application>())
+            val result: BuildResult = withContext(Dispatchers.IO) {
+                val key: SigningKey = if (s.useCustomSigning) {
+                    KeystoreReader.read(
+                        file = File(s.keystorePath),
+                        storePassword = s.keystorePassword.toCharArray(),
+                        alias = s.keystoreAlias.ifBlank { null },
+                    ).getOrElse { e ->
+                        return@withContext BuildResult.Failure(
+                            BuildStage.SIGNING,
+                            "读取签名密钥失败：${e.message}",
+                            e,
+                        )
+                    }
+                } else {
+                    TestSigningKeyProvider.get(getApplication<Application>())
+                }
                 InstallerBuilder(
                     onStage = { stage: BuildStage ->
                         _state.value = _state.value.copy(stage = stage)
