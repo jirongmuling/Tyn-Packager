@@ -1,6 +1,5 @@
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
 }
 
@@ -19,7 +18,7 @@ android {
         versionCode = 1
         versionName = "0.1.0"
 
-        // 被测 Tyranor 包名；可在 local.properties / CI 中覆盖。
+        // 被测 Tyranor 包名；可在 local.properties / CI 中用 -PTYRANOR_PACKAGE 覆盖。
         val tyranorPackage = providers.gradleProperty("TYRANOR_PACKAGE").getOrElse("com.tyranor.next")
         buildConfigField("String", "TYRANOR_PACKAGE", "\"$tyranorPackage\"")
     }
@@ -42,12 +41,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlin {
-        compilerOptions {
-            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
-        }
-    }
-
     buildFeatures {
         compose = true
         buildConfig = true
@@ -57,6 +50,13 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+    }
+}
+
+// AGP 9 起内置 Kotlin 支持，Kotlin 编译选项在此配置
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
 
