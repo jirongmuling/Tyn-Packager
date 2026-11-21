@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.tyranor.next.packager.apk.ApkOutput
+import com.tyranor.next.packager.ui.screen.BatchScreen
 import com.tyranor.next.packager.ui.screen.BuildScreen
 import com.tyranor.next.packager.ui.screen.HistoryScreen
 import com.tyranor.next.packager.ui.screen.HomeScreen
@@ -30,6 +31,7 @@ private sealed interface Screen {
     data object Onboarding : Screen
     data object Home : Screen
     data object History : Screen
+    data class Batch(val gameUris: List<String>) : Screen
     data class Build(val gameUri: String) : Screen
 }
 
@@ -89,9 +91,16 @@ private fun AppRoot(onRequestAllFilesAccess: () -> Unit) {
             onRequestAllFilesAccess = onRequestAllFilesAccess,
             onSelectGame = { game -> screen = Screen.Build(game.uri) },
             onOpenHistory = { screen = Screen.History },
+            onBatchBuild = { uris -> screen = Screen.Batch(uris) },
         )
 
         is Screen.History -> HistoryRoute(onBack = { screen = Screen.Home })
+
+        is Screen.Batch -> BatchRoute(
+            gameUris = current.gameUris,
+            homeState = homeState,
+            onBack = { screen = Screen.Home },
+        )
 
         is Screen.Build -> BuildRoute(
             gameUri = current.gameUri,
@@ -99,6 +108,33 @@ private fun AppRoot(onRequestAllFilesAccess: () -> Unit) {
             onBack = { screen = Screen.Home },
         )
     }
+}
+
+@Composable
+private fun BatchRoute(
+    gameUris: List<String>,
+    homeState: HomeUiState,
+    onBack: () -> Unit,
+) {
+    val batchVm: BatchViewModel = viewModel()
+    val state by batchVm.state.collectAsStateWithLifecycle()
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    androidx.compose.runtime.LaunchedEffect(gameUris) {
+        if (state.items.isEmpty()) {
+            val games = homeState.games.filter { it.uri in gameUris }
+            if (games.isNotEmpty()) {
+                batchVm.prepare(games, tyranorSourceDir(context))
+            }
+        }
+    }
+
+    BatchScreen(
+        state = state,
+        onBack = onBack,
+        onStart = batchVm::start,
+    )
 }
 
 @Composable
@@ -132,6 +168,13 @@ private fun HistoryRoute(onBack: () -> Unit) {
         onExport = { entry -> exportApk(context, entry.apkFile(context)) },
     )
 }
+
+/** 取已安装 Tyranor 的 APK 路径。 */
+private fun tyranorSourceDir(context: android.content.Context): String = runCatching {
+    context.packageManager
+        .getApplicationInfo(com.tyranor.next.packager.BuildConfig.TYRANOR_PACKAGE, 0)
+        .sourceDir
+}.getOrDefault("")
 
 /** 导出到下载目录并提示结果。 */
 private fun exportApk(context: android.content.Context, apk: java.io.File) {

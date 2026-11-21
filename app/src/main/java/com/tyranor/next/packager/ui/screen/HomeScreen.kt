@@ -12,6 +12,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Button
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -35,7 +40,10 @@ fun HomeScreen(
     onRequestAllFilesAccess: () -> Unit,
     onSelectGame: (com.tyranor.next.packager.data.TyranorGame) -> Unit,
     onOpenHistory: () -> Unit,
+    onBatchBuild: (List<String>) -> Unit,
 ) {
+    var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -58,11 +66,27 @@ fun HomeScreen(
 
             StatusCard(state, onRequestAllFilesAccess)
 
+            if (selected.isNotEmpty()) {
+                Button(
+                    onClick = { onBatchBuild(selected.toList()) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("批量打包（已选 ${selected.size}）")
+                }
+            }
+
             when {
                 state.loading -> LoadingRow()
                 state.error != null && state.games.isEmpty() -> ErrorBlock(state.error)
                 state.buildableGames.isEmpty() -> EmptyBlock()
-                else -> GameList(state, onSelectGame)
+                else -> GameList(
+                    state = state,
+                    onSelectGame = onSelectGame,
+                    selected = selected,
+                    onToggleSelect = { uri ->
+                        selected = if (uri in selected) selected - uri else selected + uri
+                    },
+                )
             }
         }
     }
@@ -138,12 +162,14 @@ private fun GameList(
     state: HomeUiState,
     onSelectGame: (com.tyranor.next.packager.data.TyranorGame) -> Unit,
     onOpenHistory: () -> Unit,
+    onBatchBuild: (List<String>) -> Unit,
 ) {
     LazyColumn(
         contentPadding = PaddingValues(bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(state.buildableGames, key = { it.uri }) { game ->
+            val isSelected = game.uri in selected
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -154,6 +180,10 @@ private fun GameList(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        androidx.compose.material3.Checkbox(
+                            checked = isSelected,
+                            onCheckedChange = { onToggleSelect(game.uri) },
+                        )
                         Text(
                             text = game.title.ifBlank { "未命名" },
                             style = MaterialTheme.typography.titleSmall,
