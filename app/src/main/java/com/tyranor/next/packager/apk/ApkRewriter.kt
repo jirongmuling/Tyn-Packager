@@ -64,20 +64,61 @@ class ApkRewriter(private val sourceApk: File) {
      * @param iconPng 已按目标尺寸处理好的 PNG 字节
      */
     fun replaceLauncherIcon(iconPng: ByteArray) {
-        val names = module.zipEntryMap.listInputSources().map { it.name }
-        val targets = names.filter { isLauncherIconPath(it) }
+        val targets = module.zipEntryMap.listInputSources()
+            .map { it.name }
+            .filter { isLauncherIconPath(it) }
+
         if (targets.isEmpty()) {
             putFile(ICON_FALLBACK_PATH, iconPng)
         } else {
+            // 所有密度目录统一写入同一张图：由系统按需缩放。
+            // 不做分密度重采样，是为了避免依赖 Bitmap，让该层保持纯 IO。
             targets.forEach { putFile(it, iconPng) }
         }
     }
 
-    /** 写入一个文件（覆盖同名条目）。 */
+    /** 当前 APK 中所有可能的启动器图标条目。 */
+    fun launcherIconEntries(): List<String> =
+        module.zipEntryMap.listInputSources()
+            .map { it.name }
+            .filter { isLauncherIconPath(it) }
+
+    /**
+     * 按条目分别写入图标（用于多密度）。
+     *
+     * @param byEntry 条目路径 → PNG 字节；未覆盖的条目保持原样
+     */
+    fun replaceLauncherIconsByEntry(byEntry: Map<String, ByteArray>) {
+        byEntry.forEach { (path, bytes) -> putFile(path, bytes) }
+    }
+
+    /**
+     * 推断条目所属密度目录对应的建议像素。
+     *
+     * 仅识别常见 mipmap 目录名；无法识别时返回 null。
+     */
+    fun densityPixelsOf(entry: String): Int? {
+        val dir = entry.substringBeforeLast('/', "")
+        return when {
+            dir.contains("mipmap-mdpi") -> 48
+            dir.contains("mipmap-hdpi") -> 72
+            dir.contains("mipmap-xhdpi") -> 96
+            dir.contains("mipmap-xxhdpi") -> 144
+            dir.contains("mipmap-xxxhdpi") -> 192
+            else -> null
+        }
+    }
+
+    /**
+     * 写入一个文件（覆盖同名条目）。
+     *
+     * 先显式 remove 再 add：依赖 add 的覆盖语义虽然可行，
+     * 但显式删除能让行为确定，也避免依赖库实现细节。
+     */
     fun putFile(path: String, bytes: ByteArray) {
-        module.zipEntryMap.add(
-            ByteInputSource(bytes, path).apply { setMethod(ZipEntry.DEFLATED) },
-        )
+        val map = module.zipEntryMap
+        runCatching { map.remove(path) }
+        map.add(ByteInputSource(bytes, path).apply { setMethod(ZipEntry.DEFLATED) })
     }
 
     /**
@@ -101,7 +142,9 @@ class ApkRewriter(private val sourceApk: File) {
             .forEach { file ->
                 val rel = file.relativeTo(dir).invariantSeparatorsPath
                 val entryName = normalizedPrefix + rel
-                module.zipEntryMap.add(
+                val map = module.zipEntryMap
+                runCatching { map.remove(entryName) }
+                map.add(
                     FileInputSource(file, entryName).apply { setMethod(ZipEntry.DEFLATED) },
                 )
                 count++

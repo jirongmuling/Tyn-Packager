@@ -81,6 +81,30 @@ object IconProcessor {
         return scaled
     }
 
+    /**
+     * 按目标密度分别生成图标字节。
+     *
+     * 从原始图片重新解码并按每种密度缩放，比「统一缩放后再放大」清晰得多。
+     *
+     * @param densities 需要生成的密度，键为 mipmap 目录名（如 mipmap-xxhdpi）
+     * @return 目录名 → PNG 字节；解码失败返回空 map
+     */
+    fun loadPerDensity(
+        context: Context,
+        uri: Uri,
+        densities: Map<String, Int>,
+    ): Map<String, ByteArray> = runCatching {
+        val out = LinkedHashMap<String, ByteArray>()
+        densities.forEach { (dir, px) ->
+            loadAndResize(context, uri, px.toIconSizeOrNearest())?.let { out[dir] = it }
+        }
+        out
+    }.getOrDefault(emptyMap())
+
+    /** 把任意像素值映射到最近的 [IconSize]。 */
+    private fun Int.toIconSizeOrNearest(): IconSize =
+        IconSize.entries.minByOrNull { kotlin.math.abs(it.px - this) } ?: IconSize.DEFAULT
+
     /** 编码为 PNG；超出体积上限时逐级降质（PNG 无损，通过降尺寸实现）。 */
     private fun encodePng(bitmap: Bitmap, attempt: Int = 0): ByteArray {
         val out = ByteArrayOutputStream()

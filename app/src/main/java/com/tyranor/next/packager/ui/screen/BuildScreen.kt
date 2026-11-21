@@ -172,6 +172,18 @@ private fun GameInfoCard(state: BuildUiState) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            state.dirCheck?.let { check ->
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = check.message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (check.valid) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    },
+                )
+            }
         }
     }
 }

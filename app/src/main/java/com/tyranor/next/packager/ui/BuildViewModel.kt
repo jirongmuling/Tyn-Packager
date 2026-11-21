@@ -43,6 +43,8 @@ data class BuildUiState(
     val iconBytes: ByteArray? = null,
     val iconError: String? = null,
     val iconSize: IconSize = IconSize.DEFAULT,
+    /** 多密度图标：mipmap 目录名 → PNG 字节。 */
+    val iconByDensity: Map<String, ByteArray> = emptyMap(),
     // 自动抓取
     val fetchingCover: Boolean = false,
     val coverCandidates: List<CoverCandidate> = emptyList(),
@@ -51,6 +53,8 @@ data class BuildUiState(
     val sourceApkPath: String = "",
     // 游戏目录体积（字节）；-1 表示尚未计算
     val gameDirSize: Long = -1L,
+    /** 游戏目录预检结果。 */
+    val dirCheck: com.tyranor.next.packager.apk.GameDirCheck? = null,
     // 签名
     val useCustomSigning: Boolean = false,
     val keystorePath: String = "",
@@ -74,7 +78,8 @@ data class BuildUiState(
             packageName.isNotBlank() &&
             sourceApkPath.isNotBlank() &&
             File(sourceApkPath).isFile &&
-            (!useCustomSigning || keystoreVerified)
+            (!useCustomSigning || keystoreVerified) &&
+            dirCheck?.valid == true
 }
 
 class BuildViewModel(app: Application) : AndroidViewModel(app) {
@@ -98,16 +103,17 @@ class BuildViewModel(app: Application) : AndroidViewModel(app) {
         computeGameDirSize(game)
     }
 
-    /** 统计游戏目录体积，用于提示最终包大小。 */
+    /** 预检游戏目录：同时统计体积与 Kirikiri 特征文件。 */
     private fun computeGameDirSize(game: TyranorGame) {
         val dir = game.path?.let { java.io.File(it) } ?: return
         viewModelScope.launch {
-            val size = withContext(Dispatchers.IO) {
-                runCatching {
-                    dir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
-                }.getOrDefault(-1L)
+            val check = withContext(Dispatchers.IO) {
+                com.tyranor.next.packager.apk.GameDirInspector.inspect(dir)
             }
-            _state.value = _state.value.copy(gameDirSize = size)
+            _state.value = _state.value.copy(
+                gameDirSize = check.totalBytes,
+                dirCheck = check,
+            )
         }
     }
 
@@ -133,13 +139,30 @@ class BuildViewModel(app: Application) : AndroidViewModel(app) {
     fun selectIcon(uri: Uri) {
         viewModelScope.launch {
             val size = _state.value.iconSize
-            val bytes = withContext(Dispatchers.IO) {
-                IconProcessor.loadAndResize(getApplication<Application>(), uri, size)
+            val (bytes, byDensity) = withContext(Dispatchers.IO) {
+                val single = IconProcessor.loadAndResize(getApplication<Application>(), uri, size)
+                val multi = IconProcessor.loadPerDensity(
+                    getApplication<Application>(),
+                    uri,
+                    mapOf(
+                        "mipmap-mdpi" to 48,
+                        "mipmap-hdpi" to 72,
+                        "mipmap-xhdpi" to 96,
+                        "mipmap-xxhdpi" to 144,
+                        "mipmap-xxxhdpi" to 192,
+                    ),
+                )
+                single to multi
             }
             _state.value = if (bytes == null) {
                 _state.value.copy(iconError = "无法读取该图片")
             } else {
-                _state.value.copy(iconUri = uri, iconBytes = bytes, iconError = null)
+                _state.value.copy(
+                    iconUri = uri,
+                    iconBytes = bytes,
+                    iconByDensity = byDensity,
+                    iconError = null,
+                )
             }
         }
     }
@@ -152,7 +175,12 @@ class BuildViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun clearIcon() {
-        _state.value = _state.value.copy(iconUri = null, iconBytes = null, iconError = null)
+        _state.value = _state.value.copy(
+            iconUri = null,
+            iconBytes = null,
+            iconByDensity = emptyMap(),
+            iconError = null,
+        )
     }
 
     /**
@@ -195,15 +223,36 @@ class BuildViewModel(app: Application) : AndroidViewModel(app) {
     fun applyCoverCandidate(candidate: CoverCandidate) {
         viewModelScope.launch {
             val size = _state.value.iconSize
-            val bytes = withContext(Dispatchers.IO) {
+            val pair = withContext(Dispatchers.IO) {
                 val tmp = File(getApplication<Application>().cacheDir, "cover_dl.png")
-                val file = CoverFetcher.download(candidate.coverUrl, tmp) ?: return@withContext null
-                IconProcessor.loadAndResize(getApplication<Application>(), android.net.Uri.fromFile(file), size)
+                val file = CoverFetcher.download(candidate.coverUrl, tmp)
+                    ?: return@withContext null
+                val uri = android.net.Uri.fromFile(file)
+                val single = IconProcessor.loadAndResize(getApplication<Application>(), uri, size)
+                val multi = IconProcessor.loadPerDensity(
+                    getApplication<Application>(),
+                    uri,
+                    mapOf(
+                        "mipmap-mdpi" to 48,
+                        "mipmap-hdpi" to 72,
+                        "mipmap-xhdpi" to 96,
+                        "mipmap-xxhdpi" to 144,
+                        "mipmap-xxxhdpi" to 192,
+                    ),
+                )
+                single to multi
             }
-            _state.value = if (bytes == null) {
+            val single = pair?.first
+            _state.value = if (single == null) {
                 _state.value.copy(iconError = "封面下载失败")
             } else {
-                _state.value.copy(iconBytes = bytes, iconUri = null, iconError = null, coverCandidates = emptyList())
+                _state.value.copy(
+                    iconBytes = single,
+                    iconByDensity = pair.second,
+                    iconUri = null,
+                    iconError = null,
+                    coverCandidates = emptyList(),
+                )
             }
         }
     }
@@ -326,6 +375,7 @@ class BuildViewModel(app: Application) : AndroidViewModel(app) {
                         packageName = s.packageName,
                         appLabel = s.appLabel,
                         iconPng = s.iconBytes,
+                        iconByDensity = s.iconByDensity,
                         signingKey = key,
                     ),
                 )

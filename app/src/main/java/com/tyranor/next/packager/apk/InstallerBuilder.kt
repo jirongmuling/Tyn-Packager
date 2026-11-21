@@ -17,8 +17,15 @@ data class BuildRequest(
     val packageName: String,
     /** 应用显示名。 */
     val appLabel: String,
-    /** 自定义封面 PNG 字节；null 表示不换图标。 */
+    /** 自定义封面 PNG 字节；null 表示不换图标（与 [iconUri] 二选一，优先后者）。 */
     val iconPng: ByteArray? = null,
+    /**
+     * 自定义封面原图 URI。
+     *
+     * 提供时按 APK 内各密度目录分别生成对应尺寸，比统一缩放清晰。
+     * 需要 Context 解码，故由调用方传入已处理好的多尺寸 map 时用 [iconByDensity]。
+     */
+    val iconByDensity: Map<String, ByteArray>? = null,
     /** 游戏资源在 APK 内的存放前缀。 */
     val assetPrefix: String = DEFAULT_ASSET_PREFIX,
     /** 签名密钥。 */
@@ -54,6 +61,26 @@ sealed interface BuildResult {
  * - 游戏资源以原始文件形式写入 APK 的 [BuildRequest.assetPrefix] 下，
  *   由运行时按需解出。
  */
+/** 密度目录 → 建议像素。 */
+private val DENSITY_PIXELS = mapOf(
+    "mipmap-mdpi" to 48,
+    "mipmap-hdpi" to 72,
+    "mipmap-xhdpi" to 96,
+    "mipmap-xxhdpi" to 144,
+    "mipmap-xxxhdpi" to 192,
+)
+
+/** 从多密度结果中挑选最接近目标像素的一张。 */
+private fun nearestDensityBytes(byDensity: Map<String, ByteArray>, targetPx: Int): ByteArray? {
+    val candidates = byDensity.mapNotNull { (dir, bytes) ->
+        val px = DENSITY_PIXELS.entries.firstOrNull { dir.contains(it.key) }?.value
+            ?: return@mapNotNull null
+        px to bytes
+    }
+    return candidates.minByOrNull { kotlin.math.abs(it.first - targetPx) }?.second
+        ?: byDensity.values.maxByOrNull { it.size }
+}
+
 class InstallerBuilder(
     private val onStage: (BuildStage) -> Unit = {},
     private val onEmbedProgress: (Int, String) -> Unit = { _, _ -> },
@@ -68,6 +95,8 @@ class InstallerBuilder(
             onStage(BuildStage.PREPARING)
             require(request.sourceApk.isFile) { "源 APK 不存在：${request.sourceApk}" }
             require(request.gameDir.isDirectory) { "游戏目录不存在：${request.gameDir}" }
+            val dirCheck = GameDirInspector.inspect(request.gameDir)
+            require(dirCheck.valid) { dirCheck.message }
             require(ApkPackageRules.isValid(request.packageName)) {
                 "包名非法：${request.packageName}"
             }
@@ -78,7 +107,30 @@ class InstallerBuilder(
 
             rewriter.setPackageName(request.packageName)
             request.appLabel.takeIf { it.isNotBlank() }?.let { rewriter.setAppLabel(it) }
-            request.iconPng?.let { rewriter.replaceLauncherIcon(it) }
+            when {
+                !request.iconByDensity.isNullOrEmpty() -> {
+                    // 多密度：按每个条目所在目录分别写入对应尺寸
+                    val entries = rewriter.launcherIconEntries()
+                    if (entries.isEmpty()) {
+                        request.iconByDensity.values.firstOrNull()
+                            ?.let { rewriter.replaceLauncherIcon(it) }
+                    } else {
+                        val byEntry = LinkedHashMap<String, ByteArray>()
+                        entries.forEach { entry ->
+                            val px = rewriter.densityPixelsOf(entry)
+                            val bytes = if (px == null) {
+                                // 未知目录：取最大尺寸那张
+                                request.iconByDensity.values.maxByOrNull { it.size }
+                            } else {
+                                nearestDensityBytes(request.iconByDensity, px)
+                            }
+                            if (bytes != null) byEntry[entry] = bytes
+                        }
+                        rewriter.replaceLauncherIconsByEntry(byEntry)
+                    }
+                }
+                request.iconPng != null -> rewriter.replaceLauncherIcon(request.iconPng)
+            }
 
             onStage(BuildStage.EMBEDDING)
             rewriter.removeDirectory(request.assetPrefix)
