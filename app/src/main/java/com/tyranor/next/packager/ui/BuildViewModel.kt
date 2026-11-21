@@ -117,7 +117,7 @@ class BuildViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val size = _state.value.iconSize
             val bytes = withContext(Dispatchers.IO) {
-                IconProcessor.loadAndResize(getApplication(), uri, size)
+                IconProcessor.loadAndResize(getApplication<Application>(), uri, size)
             }
             _state.value = if (bytes == null) {
                 _state.value.copy(iconError = "无法读取该图片")
@@ -181,7 +181,7 @@ class BuildViewModel(app: Application) : AndroidViewModel(app) {
             val bytes = withContext(Dispatchers.IO) {
                 val tmp = File(getApplication<Application>().cacheDir, "cover_dl.png")
                 val file = CoverFetcher.download(candidate.coverUrl, tmp) ?: return@withContext null
-                IconProcessor.loadAndResize(getApplication(), android.net.Uri.fromFile(file), size)
+                IconProcessor.loadAndResize(getApplication<Application>(), android.net.Uri.fromFile(file), size)
             }
             _state.value = if (bytes == null) {
                 _state.value.copy(iconError = "封面下载失败")
@@ -214,7 +214,7 @@ class BuildViewModel(app: Application) : AndroidViewModel(app) {
             }
 
             val result = withContext(Dispatchers.IO) {
-                val key = TestSigningKeyProvider.get(getApplication())
+                val key = TestSigningKeyProvider.get(getApplication<Application>())
                 InstallerBuilder(
                     onStage = { stage: BuildStage ->
                         _state.value = _state.value.copy(stage = stage)
