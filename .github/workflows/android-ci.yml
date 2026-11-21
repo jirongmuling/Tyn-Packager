@@ -48,6 +48,9 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Kotlin syntax precheck
+        run: python3 tools/check_kotlin_syntax.py app/src/main/java
+
       - name: Build debug
         run: ./gradlew :app:assembleDebug --stacktrace
 

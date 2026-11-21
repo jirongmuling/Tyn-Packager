@@ -215,9 +215,16 @@ class BuildViewModel(app: Application) : AndroidViewModel(app) {
 
             val result = withContext(Dispatchers.IO) {
                 val key = TestSigningKeyProvider.get(getApplication())
-                InstallerBuilder { stage ->
-                    _state.value = _state.value.copy(stage = stage)
-                }.build(
+                InstallerBuilder(
+                    onStage = { stage: BuildStage ->
+                        _state.value = _state.value.copy(stage = stage)
+                    },
+                    onEmbedProgress = { count: Int, _: String ->
+                        if (count % 25 == 0) {
+                            _state.value = _state.value.copy(stage = BuildStage.EMBEDDING)
+                        }
+                    },
+                ).build(
                     BuildRequest(
                         sourceApk = File(s.sourceApkPath),
                         gameDir = gameDir,

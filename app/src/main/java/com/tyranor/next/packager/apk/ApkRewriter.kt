@@ -58,7 +58,7 @@ class ApkRewriter(private val sourceApk: File) {
     /**
      * 替换启动器图标。
      *
-     * 直接覆盖 `res/**` 下与原图标同名的条目，不新增资源 id，
+     * 直接覆盖 res 目录下与原图标同名的条目，不新增资源 id，
      * 因而不破坏资源表引用。
      *
      * @param iconPng 已按目标尺寸处理好的 PNG 字节
