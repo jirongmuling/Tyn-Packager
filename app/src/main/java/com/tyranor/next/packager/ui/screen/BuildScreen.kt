@@ -465,7 +465,12 @@ private fun ResultCard(
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "大小 ${formatSize(result.apk.length())}",
+                        "大小 ${formatSize(result.apk.length())}" +
+                            if (result.signingSchemes.isNotEmpty()) {
+                                " · 签名 ${result.signingSchemes.joinToString("/")}"
+                            } else {
+                                ""
+                            },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

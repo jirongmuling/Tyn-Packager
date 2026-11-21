@@ -17,7 +17,7 @@ import java.util.zip.ZipEntry
  *
  * 所有操作通过 ARSCLib 直接读写二进制 `AndroidManifest.xml` 与 `resources.arsc`。
  */
-class ApkRewriter(private val sourceApk: File) {
+class ApkRewriter(private val sourceApk: File) : java.io.Closeable {
 
     private val module: ApkModule = ApkModule.loadApkFile(sourceApk)
 
@@ -31,6 +31,12 @@ class ApkRewriter(private val sourceApk: File) {
 
     /** 原 APK 的版本名。 */
     fun originalVersionName(): String? = runCatching { manifest.versionName }.getOrNull()
+
+    /** 原 APK 的 minSdkVersion；签名方案选择依赖该值。 */
+    fun minSdkVersion(): Int? = runCatching { manifest.minSdkVersion }.getOrNull()
+
+    /** 原 APK 的 targetSdkVersion。 */
+    fun targetSdkVersion(): Int? = runCatching { manifest.targetSdkVersion }.getOrNull()
 
     /**
      * 修改包名。
@@ -171,7 +177,7 @@ class ApkRewriter(private val sourceApk: File) {
     }
 
     /** 释放底层资源。 */
-    fun close() {
+    override fun close() {
         runCatching { module.close() }
     }
 

@@ -79,22 +79,52 @@ class TyranorLibraryClient(private val context: Context) {
         }
     }
 
-    /** 诊断信息，用于设置页显示“接口是否可用”。 */
+    /**
+     * 诊断接口可用性。
+     *
+     * 逐层检查，给出**可操作**的结论：没装 / 版本旧 / 没权限 / 能连但查不到数据。
+     */
     fun diagnose(): LibraryDiagnosis {
-        val installed = isTyranorInstalled()
-        if (!installed) return LibraryDiagnosis(false, false, "未安装 Tyranor")
+        if (!isTyranorInstalled()) {
+            return LibraryDiagnosis(false, false, "未安装 Tyranor，请先安装并扫描游戏")
+        }
+
         val providerAvailable = runCatching {
             context.packageManager.resolveContentProvider(authority, 0) != null
         }.getOrDefault(false)
         if (!providerAvailable) {
-            return LibraryDiagnosis(true, false, "Tyranor 版本过旧，缺少游戏库共享接口")
+            return LibraryDiagnosis(
+                true, false,
+                "Tyranor 版本过旧，缺少游戏库共享接口，请更新到最新版本",
+            )
         }
-        val granted = context.checkSelfPermission(PERMISSION_READ) == PackageManager.PERMISSION_GRANTED
-        return LibraryDiagnosis(
-            tyranorInstalled = true,
-            providerAvailable = true,
-            message = if (granted) "接口可用" else "缺少读取权限",
-        )
+
+        val granted = context.checkSelfPermission(PERMISSION_READ) ==
+            PackageManager.PERMISSION_GRANTED
+        if (!granted) {
+            return LibraryDiagnosis(true, true, "缺少读取权限，请重新安装本应用以授予权限")
+        }
+
+        // 实际查一次，确认能拿到数据（而不是仅能连上）
+        val probe = runCatching {
+            context.contentResolver.query(
+                Uri.parse("content://$authority/games?limit=1"),
+                arrayOf("uri"),
+                null, null, null,
+            )?.use { it.count }
+        }
+
+        return when {
+            probe.isFailure -> LibraryDiagnosis(
+                true, true,
+                "接口存在但读取失败：${probe.exceptionOrNull()?.message ?: "未知错误"}",
+            )
+            probe.getOrNull() == 0 -> LibraryDiagnosis(
+                true, true,
+                "接口可用，但游戏库为空。请在 Tyranor 中添加并扫描游戏目录",
+            )
+            else -> LibraryDiagnosis(true, true, "接口可用")
+        }
     }
 
     data class LibraryDiagnosis(

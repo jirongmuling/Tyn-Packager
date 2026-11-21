@@ -47,7 +47,12 @@ enum class BuildStage(val display: String) {
 
 /** 打包结果。 */
 sealed interface BuildResult {
-    data class Success(val apk: File, val embeddedFiles: Int) : BuildResult
+    data class Success(
+        val apk: File,
+        val embeddedFiles: Int,
+        /** 使用的签名方案，如 ["v2","v3"]。 */
+        val signingSchemes: List<String> = emptyList(),
+    ) : BuildResult
     data class Failure(val stage: BuildStage, val message: String, val cause: Throwable? = null) : BuildResult
 }
 
@@ -146,7 +151,7 @@ class InstallerBuilder(
             when (val signed = ApkSignerWrapper.sign(tmp, request.outputApk, request.signingKey)) {
                 is SignResult.Success -> {
                     onStage(BuildStage.DONE)
-                    BuildResult.Success(signed.output, embedded)
+                    BuildResult.Success(signed.output, embedded, signed.schemes)
                 }
                 is SignResult.Failure -> BuildResult.Failure(
                     BuildStage.SIGNING, signed.error, signed.cause,
