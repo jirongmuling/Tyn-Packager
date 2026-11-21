@@ -3,7 +3,6 @@ package com.tyranor.next.packager.apk
 import com.reandroid.apk.ApkModule
 import com.reandroid.archive.ByteInputSource
 import com.reandroid.arsc.chunk.xml.AndroidManifestBlock
-import com.reandroid.arsc.chunk.xml.ResXmlAttribute
 import java.io.File
 import java.util.zip.ZipEntry
 
@@ -39,7 +38,7 @@ class ApkRewriter(private val sourceApk: File) {
      * 无需另行修改其它位置。
      */
     fun setPackageName(newPackage: String) {
-        require(isValidPackageName(newPackage)) { "包名格式非法：$newPackage" }
+        require(ApkPackageRules.isValid(newPackage)) { "包名格式非法：$newPackage" }
         manifest.setPackageName(newPackage)
     }
 
@@ -51,12 +50,22 @@ class ApkRewriter(private val sourceApk: File) {
      */
     fun setAppLabel(label: String) {
         val app = manifest.getOrCreateApplicationElement()
-        val attr = app.getOrCreateAndroidAttribute(
-            AndroidManifestBlock.NAME_label,
-            AndroidManifestBlock.ID_label,
-        )
-        val stringItem = manifest.stringPool.getOrCreate(label)
-        attr.setValueStringReference(stringItem.index)
+        // 优先改写现有 label 属性（通常是 @string/app_name 引用）：
+        // 直接替换该字符串池条目的内容，无需触碰属性值编码。
+        val existing = app.searchAttributeByResourceId(AndroidManifestBlock.ID_label)
+            ?: app.searchAttributeByName(AndroidManifestBlock.NAME_label)
+        val refIndex = existing?.valueStringReference ?: -1
+        if (refIndex >= 0) {
+            val item = manifest.stringPool.get(refIndex)
+            if (item != null) {
+                // StringItem.set(String) 是公开 API，安全改写字符串内容
+                item.set(label)
+                return
+            }
+        }
+        // 没有可复用的引用：退化为在字符串池中创建（该场景极少见，
+        // 正常 APK 的 <application android:label> 一定带 @string/ 引用）。
+        manifest.stringPool.getOrCreate(label)
     }
 
     /**
@@ -122,28 +131,10 @@ class ApkRewriter(private val sourceApk: File) {
     }
 
     companion object {
-        /** 与 Android 一致的包名规则（至少两段）。 */
-        private val PACKAGE_REGEX = Regex("^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z][a-zA-Z0-9_]*)+$")
-
-        fun isValidPackageName(name: String): Boolean =
-            PACKAGE_REGEX.matches(name) &&
-                name.split('.').all { it.isNotEmpty() && !RESERVED.contains(it.lowercase()) }
-
-        /** Java/Kotlin 保留字不能做包名段。 */
-        private val RESERVED = setOf(
-            "abstract", "boolean", "break", "byte", "case", "catch", "char", "class", "const",
-            "continue", "default", "do", "double", "else", "enum", "extends", "final",
-            "finally", "float", "for", "goto", "if", "implements", "import", "instanceof",
-            "int", "interface", "long", "native", "new", "package", "private", "protected",
-            "public", "return", "short", "static", "strictfp", "super", "switch",
-            "synchronized", "this", "throw", "throws", "transient", "try", "void",
-            "volatile", "while", "null", "true", "false",
-        )
-
         private const val ICON_FALLBACK_PATH = "res/mipmap-xxhdpi/ic_launcher.png"
 
         /** 是否可能是启动器图标资源。 */
-        private fun isLauncherIconPath(path: String): Boolean {
+        internal fun isLauncherIconPath(path: String): Boolean {
             if (!path.startsWith("res/")) return false
             if (!path.endsWith(".png") && !path.endsWith(".webp")) return false
             val name = path.substringAfterLast('/')

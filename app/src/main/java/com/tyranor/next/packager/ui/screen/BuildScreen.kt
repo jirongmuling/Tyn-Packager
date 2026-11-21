@@ -1,0 +1,317 @@
+package com.tyranor.next.packager.ui.screen
+
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.dp
+import com.tyranor.next.packager.apk.BuildResult
+import com.tyranor.next.packager.apk.BuildStage
+import com.tyranor.next.packager.ui.BuildUiState
+import java.io.File
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun BuildScreen(
+    state: BuildUiState,
+    onBack: () -> Unit,
+    onPackageNameChange: (String) -> Unit,
+    onAppLabelChange: (String) -> Unit,
+    onPickIcon: () -> Unit,
+    onClearIcon: () -> Unit,
+    onBuild: () -> Unit,
+) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(state.game?.title ?: "制作直装包") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                    }
+                },
+            )
+        },
+    ) { inner ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(inner)
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Spacer(Modifier.height(2.dp))
+
+            GameInfoCard(state)
+            BasicInfoCard(state, onPackageNameChange, onAppLabelChange)
+            IconCard(state, onPickIcon, onClearIcon)
+            SigningInfoCard()
+
+            OutlinedTextField(
+                value = state.sourceApkPath,
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("源 APK（Tyranor 本体）") },
+                modifier = Modifier.fillMaxWidth(),
+                textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                singleLine = true,
+            )
+
+            if (state.building) {
+                BuildingCard(state.stage)
+            }
+
+            Button(
+                onClick = onBuild,
+                enabled = state.canBuild,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (state.building) "制作中…" else "生成直装包")
+            }
+
+            state.result?.let { ResultCard(it) }
+
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun GameInfoCard(state: BuildUiState) {
+    val game = state.game ?: return
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text("游戏", style = MaterialTheme.typography.labelMedium)
+            Spacer(Modifier.height(4.dp))
+            Text(game.title.ifBlank { "未命名" }, style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = game.path ?: "路径未知",
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (game.launchTarget.isNotBlank()) {
+                Text(
+                    text = "启动文件：${game.launchTarget}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BasicInfoCard(
+    state: BuildUiState,
+    onPackageNameChange: (String) -> Unit,
+    onAppLabelChange: (String) -> Unit,
+) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("应用信息", style = MaterialTheme.typography.labelMedium)
+
+            OutlinedTextField(
+                value = state.appLabel,
+                onValueChange = onAppLabelChange,
+                label = { Text("应用名称") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            OutlinedTextField(
+                value = state.packageName,
+                onValueChange = onPackageNameChange,
+                label = { Text("包名") },
+                singleLine = true,
+                isError = state.packageNameError != null,
+                supportingText = {
+                    Text(state.packageNameError ?: "安装后与其他版本共存需不同包名")
+                },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
+
+@Composable
+private fun IconCard(
+    state: BuildUiState,
+    onPickIcon: () -> Unit,
+    onClearIcon: () -> Unit,
+) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text("图标", style = MaterialTheme.typography.labelMedium)
+            Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(RoundedCornerShape(14.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    val bytes = state.iconBytes
+                    if (bytes != null) {
+                        val bitmap = remember(bytes) {
+                            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                        }
+                        bitmap?.let {
+                            Image(
+                                bitmap = it.asImageBitmap(),
+                                contentDescription = "自定义图标",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.size(64.dp),
+                            )
+                        }
+                    } else {
+                        Text("默认", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+                Spacer(Modifier.size(16.dp))
+                Column {
+                    TextButton(onClick = onPickIcon) { Text("选择图片") }
+                    if (state.iconBytes != null) {
+                        TextButton(onClick = onClearIcon) { Text("恢复默认") }
+                    }
+                }
+            }
+            state.iconError?.let {
+                Spacer(Modifier.height(6.dp))
+                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "图片会自动居中裁剪为正方形并缩放。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SigningInfoCard() {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text("签名", style = MaterialTheme.typography.labelMedium)
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "当前使用测试签名（本机自签证书）。同一设备多次打包签名一致，可正常覆盖安装。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun BuildingCard(stage: BuildStage?) {
+    Card(Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+            Spacer(Modifier.size(14.dp))
+            Text(stage?.display ?: "准备中", style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
+@Composable
+private fun ResultCard(result: BuildResult) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            when (result) {
+                is BuildResult.Success -> {
+                    Text("制作完成", style = MaterialTheme.typography.titleSmall)
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "已内置 ${result.embeddedFiles} 个游戏文件",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        result.apk.absolutePath,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "大小 ${formatSize(result.apk.length())}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                is BuildResult.Failure -> {
+                    Text("制作失败", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.error)
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "阶段：${result.stage.display}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        result.message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun formatSize(bytes: Long): String = when {
+    bytes >= 1024L * 1024 * 1024 -> "%.2f GB".format(bytes / 1024.0 / 1024 / 1024)
+    bytes >= 1024L * 1024 -> "%.1f MB".format(bytes / 1024.0 / 1024)
+    bytes >= 1024L -> "%.0f KB".format(bytes / 1024.0)
+    else -> "$bytes B"
+}

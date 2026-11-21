@@ -66,7 +66,7 @@ class InstallerBuilder(
             onStage(BuildStage.PREPARING)
             require(request.sourceApk.isFile) { "源 APK 不存在：${request.sourceApk}" }
             require(request.gameDir.isDirectory) { "游戏目录不存在：${request.gameDir}" }
-            ApkRewriter.isValidPackageName(request.packageName) || error("包名非法")
+            ApkPackageRules.isValid(request.packageName) || error("包名非法")
 
             onStage(BuildStage.REWRITING)
             rewriter = ApkRewriter(request.sourceApk)
