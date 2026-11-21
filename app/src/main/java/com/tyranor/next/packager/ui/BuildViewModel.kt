@@ -60,6 +60,8 @@ data class BuildUiState(
     val keystoreVerified: Boolean = false,
     val keystoreError: String? = null,
     // 运行态
+    /** 构建成功后对产物的安装前检查结果。 */
+    val installCheck: com.tyranor.next.packager.apk.InstallCheck? = null,
     val building: Boolean = false,
     val stage: BuildStage? = null,
     val result: BuildResult? = null,
@@ -346,7 +348,19 @@ class BuildViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
 
-            _state.value = _state.value.copy(building = false, result = result)
+            val check = if (result is BuildResult.Success) {
+                withContext(Dispatchers.IO) {
+                    com.tyranor.next.packager.apk.InstallChecker.check(
+                        getApplication(),
+                        result.apk,
+                        s.packageName,
+                    )
+                }
+            } else {
+                null
+            }
+
+            _state.value = _state.value.copy(building = false, result = result, installCheck = check)
         }
     }
 

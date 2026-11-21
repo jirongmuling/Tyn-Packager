@@ -136,7 +136,7 @@ fun BuildScreen(
                 Text(if (state.building) "制作中…" else "生成直装包")
             }
 
-            state.result?.let { ResultCard(it, onInstall, onShare, onExport) }
+            state.result?.let { ResultCard(it, onInstall, onShare, onExport, state.installCheck) }
 
             Spacer(Modifier.height(24.dp))
         }
@@ -432,6 +432,7 @@ private fun ResultCard(
     onInstall: (File) -> Unit,
     onShare: (File) -> Unit,
     onExport: (File) -> Unit,
+    installCheck: com.tyranor.next.packager.apk.InstallCheck?,
 ) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
@@ -456,6 +457,18 @@ private fun ResultCard(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    installCheck?.let { check ->
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            check.message,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (check.canInstall) {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            } else {
+                                MaterialTheme.colorScheme.error
+                            },
+                        )
+                    }
                     Spacer(Modifier.height(12.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Button(onClick = { onInstall(result.apk) }) { Text("安装") }

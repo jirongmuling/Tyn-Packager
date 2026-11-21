@@ -161,8 +161,8 @@ private fun EmptyBlock() {
 private fun GameList(
     state: HomeUiState,
     onSelectGame: (com.tyranor.next.packager.data.TyranorGame) -> Unit,
-    onOpenHistory: () -> Unit,
-    onBatchBuild: (List<String>) -> Unit,
+    selected: Set<String>,
+    onToggleSelect: (String) -> Unit,
 ) {
     LazyColumn(
         contentPadding = PaddingValues(bottom = 24.dp),

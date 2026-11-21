@@ -152,11 +152,7 @@ private fun HistoryRoute(onBack: () -> Unit) {
         onDelete = historyVm::delete,
         onClearAll = historyVm::clearAll,
         onInstall = { entry ->
-            ApkOutput.install(context, entry.apkFile(context)).onFailure {
-                android.widget.Toast
-                    .makeText(context, "无法安装：${it.message}", android.widget.Toast.LENGTH_LONG)
-                    .show()
-            }
+            installWithCheck(context, entry.apkFile(context), entry.packageName)
         },
         onShare = { entry ->
             ApkOutput.share(context, entry.apkFile(context)).onFailure {
@@ -167,6 +163,28 @@ private fun HistoryRoute(onBack: () -> Unit) {
         },
         onExport = { entry -> exportApk(context, entry.apkFile(context)) },
     )
+}
+
+/** 安装前检查并提示，然后调起安装器。 */
+private fun installWithCheck(
+    context: android.content.Context,
+    apk: java.io.File,
+    packageName: String,
+) {
+    val check = com.tyranor.next.packager.apk.InstallChecker.check(context, apk, packageName)
+    if (!check.canInstall) {
+        android.app.AlertDialog.Builder(context)
+            .setTitle("无法直接安装")
+            .setMessage(check.message)
+            .setPositiveButton("知道了", null)
+            .show()
+        return
+    }
+    com.tyranor.next.packager.apk.ApkOutput.install(context, apk).onFailure {
+        android.widget.Toast
+            .makeText(context, "无法安装：${it.message}", android.widget.Toast.LENGTH_LONG)
+            .show()
+    }
 }
 
 /** 取已安装 Tyranor 的 APK 路径。 */
@@ -258,13 +276,7 @@ private fun BuildRoute(
         onKeystoreAliasChange = buildVm::setKeystoreAlias,
         onVerifyKeystore = buildVm::verifyKeystore,
         onBuild = buildVm::build,
-        onInstall = { apk ->
-            ApkOutput.install(context, apk).onFailure {
-                android.widget.Toast
-                    .makeText(context, "无法安装：${it.message}", android.widget.Toast.LENGTH_LONG)
-                    .show()
-            }
-        },
+        onInstall = { apk -> installWithCheck(context, apk, state.packageName) },
         onShare = { apk ->
             ApkOutput.share(context, apk).onFailure {
                 android.widget.Toast
