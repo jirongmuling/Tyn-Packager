@@ -36,6 +36,8 @@ data class BuildUiState(
     // 包名
     val packageName: String = "",
     val packageNameError: String? = null,
+    /** 本机已存在同包名应用时的版本名。 */
+    val installedConflict: String? = null,
     // 应用名
     val appLabel: String = "",
     // 图标
@@ -92,11 +94,13 @@ class BuildViewModel(app: Application) : AndroidViewModel(app) {
     /** 选中要打包的游戏，自动填入默认包名与应用名。 */
     fun selectGame(game: TyranorGame) {
         val defaultLabel = game.title.ifBlank { "Game" }
+        val suggested = suggestPackageName(defaultLabel)
         _state.value = _state.value.copy(
             game = game,
             appLabel = defaultLabel,
-            packageName = suggestPackageName(defaultLabel),
+            packageName = suggested,
             packageNameError = null,
+            installedConflict = checkInstalled(suggested),
             result = null,
         )
         autoDetectSourceApk()
@@ -122,10 +126,26 @@ class BuildViewModel(app: Application) : AndroidViewModel(app) {
         val error = when {
             trimmed.isEmpty() -> "包名不能为空"
             !ApkPackageRules.isValid(trimmed) -> "包名格式非法（至少两段，字母开头）"
+            // 与 Tyranor 本体或本应用冲突会带来混乱，直接拦下
+            trimmed == com.tyranor.next.packager.BuildConfig.TYRANOR_PACKAGE ->
+                "不能与 Tyranor 本体同包名"
+            trimmed == getApplication<Application>().packageName ->
+                "不能与本应用同包名"
             else -> null
         }
-        _state.value = _state.value.copy(packageName = trimmed, packageNameError = error)
+        _state.value = _state.value.copy(
+            packageName = trimmed,
+            packageNameError = error,
+            installedConflict = if (error == null) checkInstalled(trimmed) else null,
+        )
     }
+
+    /** 包名已安装在本机时，返回已安装版本名（仅提示，不阻止）。 */
+    private fun checkInstalled(packageName: String): String? = runCatching {
+        getApplication<Application>().packageManager
+            .getPackageInfo(packageName, 0)
+            .versionName
+    }.getOrNull()
 
     fun updateAppLabel(value: String) {
         _state.value = _state.value.copy(appLabel = value)

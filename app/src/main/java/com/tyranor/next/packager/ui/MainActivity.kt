@@ -23,6 +23,7 @@ import com.tyranor.next.packager.apk.ApkOutput
 import com.tyranor.next.packager.ui.screen.BatchScreen
 import com.tyranor.next.packager.ui.screen.BuildScreen
 import com.tyranor.next.packager.ui.screen.HistoryScreen
+import com.tyranor.next.packager.ui.screen.SettingsScreen
 import com.tyranor.next.packager.ui.screen.HomeScreen
 import com.tyranor.next.packager.ui.theme.TynPackagerTheme
 
@@ -31,6 +32,7 @@ private sealed interface Screen {
     data object Onboarding : Screen
     data object Home : Screen
     data object History : Screen
+    data object Settings : Screen
     data class Batch(val gameUris: List<String>) : Screen
     data class Build(val gameUri: String) : Screen
 }
@@ -92,9 +94,17 @@ private fun AppRoot(onRequestAllFilesAccess: () -> Unit) {
             onSelectGame = { game -> screen = Screen.Build(game.uri) },
             onOpenHistory = { screen = Screen.History },
             onBatchBuild = { uris -> screen = Screen.Batch(uris) },
+            onQueryChange = homeVm::setQuery,
+            onToggleOnlyRecent = homeVm::toggleOnlyRecent,
+            onOpenSettings = { screen = Screen.Settings },
         )
 
         is Screen.History -> HistoryRoute(onBack = { screen = Screen.Home })
+
+        is Screen.Settings -> SettingsRoute(
+            onBack = { screen = Screen.Home },
+            onRequestAllFilesAccess = onRequestAllFilesAccess,
+        )
 
         is Screen.Batch -> BatchRoute(
             gameUris = current.gameUris,
@@ -108,6 +118,26 @@ private fun AppRoot(onRequestAllFilesAccess: () -> Unit) {
             onBack = { screen = Screen.Home },
         )
     }
+}
+
+@Composable
+private fun SettingsRoute(
+    onBack: () -> Unit,
+    onRequestAllFilesAccess: () -> Unit,
+) {
+    val vm: SettingsViewModel = viewModel()
+    val state by vm.state.collectAsStateWithLifecycle()
+
+    androidx.compose.runtime.LaunchedEffect(Unit) { vm.refresh() }
+
+    SettingsScreen(
+        state = state,
+        onBack = onBack,
+        onClearCache = vm::clearCache,
+        onClearOutputs = vm::clearOutputs,
+        onResetOnboarding = vm::resetOnboarding,
+        onRequestAllFilesAccess = onRequestAllFilesAccess,
+    )
 }
 
 @Composable

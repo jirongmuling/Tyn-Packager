@@ -214,7 +214,19 @@ private fun BasicInfoCard(
                 singleLine = true,
                 isError = state.packageNameError != null,
                 supportingText = {
-                    Text(state.packageNameError ?: "安装后与其他版本共存需不同包名")
+                    Text(
+                        when {
+                            state.packageNameError != null -> state.packageNameError
+                            state.installedConflict != null ->
+                                "本机已安装同包名应用（${state.installedConflict}），可能覆盖或冲突"
+                            else -> "安装后与其他版本共存需不同包名"
+                        },
+                        color = if (state.packageNameError != null) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
                 },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 modifier = Modifier.fillMaxWidth(),

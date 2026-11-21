@@ -17,6 +17,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -41,6 +43,9 @@ fun HomeScreen(
     onSelectGame: (com.tyranor.next.packager.data.TyranorGame) -> Unit,
     onOpenHistory: () -> Unit,
     onBatchBuild: (List<String>) -> Unit,
+    onQueryChange: (String) -> Unit,
+    onToggleOnlyRecent: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
 
@@ -51,6 +56,7 @@ fun HomeScreen(
                 actions = {
                     TextButton(onClick = onOpenHistory) { Text("历史") }
                     TextButton(onClick = onRefresh) { Text("刷新") }
+                    TextButton(onClick = onOpenSettings) { Text("设置") }
                 },
             )
         },
@@ -66,6 +72,32 @@ fun HomeScreen(
 
             StatusCard(state, onRequestAllFilesAccess)
 
+            // 搜索与筛选（仅在游戏较多时出现，避免列表很少时干扰）
+            if (state.totalBuildable > 3) {
+                OutlinedTextField(
+                    value = state.query,
+                    onValueChange = onQueryChange,
+                    label = { Text("搜索游戏") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (state.onlyRecent) {
+                        Button(onClick = onToggleOnlyRecent) { Text("只看最近玩过") }
+                    } else {
+                        OutlinedButton(onClick = onToggleOnlyRecent) { Text("只看最近玩过") }
+                    }
+                    Text(
+                        "共 ${state.totalBuildable} 个，显示 ${state.buildableGames.size}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
             if (selected.isNotEmpty()) {
                 Button(
                     onClick = { onBatchBuild(selected.toList()) },
@@ -78,6 +110,8 @@ fun HomeScreen(
             when {
                 state.loading -> LoadingRow()
                 state.error != null && state.games.isEmpty() -> ErrorBlock(state.error)
+                state.buildableGames.isEmpty() && state.query.isNotBlank() ->
+                    NoMatchBlock(state.query)
                 state.buildableGames.isEmpty() -> EmptyBlock()
                 else -> GameList(
                     state = state,
@@ -138,6 +172,17 @@ private fun ErrorBlock(message: String) {
             text = message,
             modifier = Modifier.padding(16.dp),
             color = MaterialTheme.colorScheme.error,
+        )
+    }
+}
+
+@Composable
+private fun NoMatchBlock(query: String) {
+    Card(Modifier.fillMaxWidth()) {
+        Text(
+            "没有匹配「$query」的游戏",
+            modifier = Modifier.padding(16.dp),
+            style = MaterialTheme.typography.bodySmall,
         )
     }
 }

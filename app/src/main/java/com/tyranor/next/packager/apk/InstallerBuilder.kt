@@ -56,16 +56,6 @@ sealed interface BuildResult {
     data class Failure(val stage: BuildStage, val message: String, val cause: Throwable? = null) : BuildResult
 }
 
-/**
- * 直装包构建编排。
- *
- * 流程：读取源 APK → 改包名/名称/图标 → 内置游戏资源 → 输出未签名 APK → 签名。
- *
- * 说明：
- * - 采用**原地改包**而非 aapt 反编译重打包，最大限度保留引擎 native 库；
- * - 游戏资源以原始文件形式写入 APK 的 [BuildRequest.assetPrefix] 下，
- *   由运行时按需解出。
- */
 /** 密度目录 → 建议像素。 */
 private val DENSITY_PIXELS = mapOf(
     "mipmap-mdpi" to 48,
@@ -86,6 +76,15 @@ private fun nearestDensityBytes(byDensity: Map<String, ByteArray>, targetPx: Int
         ?: byDensity.values.maxByOrNull { it.size }
 }
 
+/**
+ * 直装包构建编排。
+ *
+ * 流程：读取源 APK → 改包名/名称/图标 → 内置游戏资源 → 输出未签名 APK → 签名。
+ *
+ * 说明：
+ * - 采用**原地改包**而非 aapt 反编译重打包，最大限度保留引擎 native 库；
+ * - 游戏资源以原始文件形式写入 APK 的 `assets/game/` 下，由运行时按需解出。
+ */
 class InstallerBuilder(
     private val onStage: (BuildStage) -> Unit = {},
     private val onEmbedProgress: (Int, String) -> Unit = { _, _ -> },
@@ -158,6 +157,8 @@ class InstallerBuilder(
                 )
             }
         } catch (e: Exception) {
+            // 失败时清理半成品，避免用户拿到损坏的 APK
+            runCatching { request.outputApk.delete() }
             BuildResult.Failure(BuildStage.DONE, e.message ?: e.javaClass.simpleName, e)
         } finally {
             runCatching { closable?.close() }
