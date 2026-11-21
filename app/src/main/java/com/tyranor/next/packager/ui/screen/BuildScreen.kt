@@ -45,6 +45,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.tyranor.next.packager.apk.BuildResult
+import com.tyranor.next.packager.apk.IconSize
 import com.tyranor.next.packager.apk.BuildStage
 import com.tyranor.next.packager.ui.BuildUiState
 import java.io.File
@@ -58,7 +59,10 @@ fun BuildScreen(
     onAppLabelChange: (String) -> Unit,
     onPickIcon: () -> Unit,
     onClearIcon: () -> Unit,
+    onIconSizeChange: (IconSize) -> Unit,
     onBuild: () -> Unit,
+    onInstall: (File) -> Unit,
+    onShare: (File) -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -84,7 +88,7 @@ fun BuildScreen(
 
             GameInfoCard(state)
             BasicInfoCard(state, onPackageNameChange, onAppLabelChange)
-            IconCard(state, onPickIcon, onClearIcon)
+            IconCard(state, onPickIcon, onClearIcon, onIconSizeChange)
             SigningInfoCard()
 
             OutlinedTextField(
@@ -109,7 +113,7 @@ fun BuildScreen(
                 Text(if (state.building) "制作中…" else "生成直装包")
             }
 
-            state.result?.let { ResultCard(it) }
+            state.result?.let { ResultCard(it, onInstall, onShare) }
 
             Spacer(Modifier.height(24.dp))
         }
@@ -182,6 +186,7 @@ private fun IconCard(
     state: BuildUiState,
     onPickIcon: () -> Unit,
     onClearIcon: () -> Unit,
+    onIconSizeChange: (IconSize) -> Unit,
 ) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
@@ -223,9 +228,26 @@ private fun IconCard(
                 Spacer(Modifier.height(6.dp))
                 Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
+            Spacer(Modifier.height(10.dp))
+            Text("尺寸", style = MaterialTheme.typography.labelSmall)
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                IconSize.entries.forEach { size ->
+                    val selected = state.iconSize == size
+                    if (selected) {
+                        Button(onClick = { onIconSizeChange(size) }) {
+                            Text("${size.px}px", style = MaterialTheme.typography.labelSmall)
+                        }
+                    } else {
+                        OutlinedButton(onClick = { onIconSizeChange(size) }) {
+                            Text("${size.px}px", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+            }
             Spacer(Modifier.height(6.dp))
             Text(
-                "图片会自动居中裁剪为正方形并缩放。",
+                "图片会自动居中裁剪为正方形并缩放；尺寸越大越清晰，同时也会增大 APK。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -265,7 +287,11 @@ private fun BuildingCard(stage: BuildStage?) {
 }
 
 @Composable
-private fun ResultCard(result: BuildResult) {
+private fun ResultCard(
+    result: BuildResult,
+    onInstall: (File) -> Unit,
+    onShare: (File) -> Unit,
+) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             when (result) {
@@ -289,6 +315,11 @@ private fun ResultCard(result: BuildResult) {
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    Spacer(Modifier.height(12.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Button(onClick = { onInstall(result.apk) }) { Text("安装") }
+                        OutlinedButton(onClick = { onShare(result.apk) }) { Text("分享") }
+                    }
                 }
                 is BuildResult.Failure -> {
                     Text("制作失败", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.error)

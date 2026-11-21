@@ -2,6 +2,7 @@ package com.tyranor.next.packager.apk
 
 import com.reandroid.apk.ApkModule
 import com.reandroid.archive.ByteInputSource
+import com.reandroid.archive.FileInputSource
 import com.reandroid.arsc.chunk.xml.AndroidManifestBlock
 import java.io.File
 import java.util.zip.ZipEntry
@@ -49,23 +50,9 @@ class ApkRewriter(private val sourceApk: File) {
      * 覆盖原有的 `@string/...` 引用，因此无需改资源表。
      */
     fun setAppLabel(label: String) {
-        val app = manifest.getOrCreateApplicationElement()
-        // 优先改写现有 label 属性（通常是 @string/app_name 引用）：
-        // 直接替换该字符串池条目的内容，无需触碰属性值编码。
-        val existing = app.searchAttributeByResourceId(AndroidManifestBlock.ID_label)
-            ?: app.searchAttributeByName(AndroidManifestBlock.NAME_label)
-        val refIndex = existing?.valueStringReference ?: -1
-        if (refIndex >= 0) {
-            val item = manifest.stringPool.get(refIndex)
-            if (item != null) {
-                // StringItem.set(String) 是公开 API，安全改写字符串内容
-                item.set(label)
-                return
-            }
-        }
-        // 没有可复用的引用：退化为在字符串池中创建（该场景极少见，
-        // 正常 APK 的 <application android:label> 一定带 @string/ 引用）。
-        manifest.stringPool.getOrCreate(label)
+        // AndroidManifestBlock.setApplicationLabel(String) 是 ARSCLib 的公开 API，
+        // 内部会正确处理 @string/ 引用与字符串池，无需手工构造属性。
+        manifest.setApplicationLabel(label)
     }
 
     /**
@@ -93,8 +80,19 @@ class ApkRewriter(private val sourceApk: File) {
         )
     }
 
-    /** 把目录下所有文件递归写入 APK 的指定前缀路径（如 `assets/game/`）。 */
-    fun putDirectory(prefix: String, dir: File): Int {
+    /**
+     * 把目录下所有文件递归写入 APK 的指定前缀路径（如 `assets/game/`）。
+     *
+     * **使用 [FileInputSource] 流式写入**，不把文件读进内存：
+     * Kirikiri 游戏的 xp3 动辄数百 MB 乃至 GB，一次性 readBytes 必然 OOM。
+     *
+     * @param onProgress 每写入一个文件回调一次（已写入数, 当前文件名）
+     */
+    fun putDirectory(
+        prefix: String,
+        dir: File,
+        onProgress: ((Int, String) -> Unit)? = null,
+    ): Int {
         if (!dir.isDirectory) return 0
         val normalizedPrefix = prefix.trimEnd('/') + "/"
         var count = 0
@@ -102,8 +100,12 @@ class ApkRewriter(private val sourceApk: File) {
             .filter { it.isFile }
             .forEach { file ->
                 val rel = file.relativeTo(dir).invariantSeparatorsPath
-                putFile(normalizedPrefix + rel, file.readBytes())
+                val entryName = normalizedPrefix + rel
+                module.zipEntryMap.add(
+                    FileInputSource(file, entryName).apply { setMethod(ZipEntry.DEFLATED) },
+                )
                 count++
+                onProgress?.invoke(count, rel)
             }
         return count
     }

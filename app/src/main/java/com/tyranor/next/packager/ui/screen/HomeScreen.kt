@@ -32,6 +32,7 @@ fun HomeScreen(
     state: HomeUiState,
     onRefresh: () -> Unit,
     onRequestAllFilesAccess: () -> Unit,
+    onSelectGame: (com.tyranor.next.packager.data.TyranorGame) -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -58,7 +59,7 @@ fun HomeScreen(
                 state.loading -> LoadingRow()
                 state.error != null && state.games.isEmpty() -> ErrorBlock(state.error)
                 state.buildableGames.isEmpty() -> EmptyBlock()
-                else -> GameList(state)
+                else -> GameList(state, onSelectGame)
             }
         }
     }
@@ -130,13 +131,20 @@ private fun EmptyBlock() {
 }
 
 @Composable
-private fun GameList(state: HomeUiState) {
+private fun GameList(
+    state: HomeUiState,
+    onSelectGame: (com.tyranor.next.packager.data.TyranorGame) -> Unit,
+) {
     LazyColumn(
         contentPadding = PaddingValues(bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(state.buildableGames, key = { it.uri }) { game ->
-            Card(Modifier.fillMaxWidth()) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onSelectGame(game) },
+            ) {
                 Column(Modifier.padding(14.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),

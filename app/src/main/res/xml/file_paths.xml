@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- 打包产物目录：APK 需要经 FileProvider 交给系统安装器或分享目标 -->
+    <files-path name="packager_output" path="packager/output/" />
+    <files-path name="packager_all" path="packager/" />
+    <cache-path name="cache" path="." />
+</paths>

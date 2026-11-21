@@ -12,6 +12,8 @@ import com.tyranor.next.packager.apk.BuildStage
 import com.tyranor.next.packager.apk.IconProcessor
 import com.tyranor.next.packager.apk.IconSize
 import com.tyranor.next.packager.apk.InstallerBuilder
+import com.tyranor.next.packager.cover.CoverCandidate
+import com.tyranor.next.packager.cover.CoverFetcher
 import com.tyranor.next.packager.data.TyranorGame
 import com.tyranor.next.packager.sign.TestSigningKeyProvider
 import kotlinx.coroutines.Dispatchers
@@ -34,6 +36,11 @@ data class BuildUiState(
     val iconUri: Uri? = null,
     val iconBytes: ByteArray? = null,
     val iconError: String? = null,
+    val iconSize: IconSize = IconSize.DEFAULT,
+    // 自动抓取
+    val fetchingCover: Boolean = false,
+    val coverCandidates: List<CoverCandidate> = emptyList(),
+    val coverError: String? = null,
     // 源 APK
     val sourceApkPath: String = "",
     // 运行态
@@ -92,8 +99,9 @@ class BuildViewModel(app: Application) : AndroidViewModel(app) {
     /** 选择自定义封面。 */
     fun selectIcon(uri: Uri) {
         viewModelScope.launch {
+            val size = _state.value.iconSize
             val bytes = withContext(Dispatchers.IO) {
-                IconProcessor.loadAndResize(getApplication(), uri, IconSize.DEFAULT)
+                IconProcessor.loadAndResize(getApplication(), uri, size)
             }
             _state.value = if (bytes == null) {
                 _state.value.copy(iconError = "无法读取该图片")
@@ -103,8 +111,68 @@ class BuildViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** 切换图标尺寸；已有图片时按新尺寸重新处理。 */
+    fun setIconSize(size: IconSize) {
+        val uri = _state.value.iconUri
+        _state.value = _state.value.copy(iconSize = size)
+        if (uri != null) selectIcon(uri)
+    }
+
     fun clearIcon() {
         _state.value = _state.value.copy(iconUri = null, iconBytes = null, iconError = null)
+    }
+
+    /**
+     * 按游戏名自动抓取封面候选。
+     *
+     * 优先用游戏标题，其次用目录名；VNDB 未命中时给出明确提示，
+     * 由用户回退到手动选图。
+     */
+    fun fetchCovers() {
+        val game = _state.value.game ?: return
+        if (_state.value.fetchingCover) return
+
+        val queries = buildList {
+            game.title.takeIf { it.isNotBlank() }?.let(::add)
+            game.path?.let { java.io.File(it).name }?.takeIf { it.isNotBlank() }?.let(::add)
+        }.distinct()
+
+        if (queries.isEmpty()) {
+            _state.value = _state.value.copy(coverError = "缺少可用于搜索的游戏名")
+            return
+        }
+
+        _state.value = _state.value.copy(fetchingCover = true, coverError = null, coverCandidates = emptyList())
+
+        viewModelScope.launch {
+            var found: List<CoverCandidate> = emptyList()
+            for (q in queries) {
+                found = CoverFetcher.search(q)
+                if (found.isNotEmpty()) break
+            }
+            _state.value = _state.value.copy(
+                fetchingCover = false,
+                coverCandidates = found,
+                coverError = if (found.isEmpty()) "未找到匹配的封面，可改用本地图片" else null,
+            )
+        }
+    }
+
+    /** 选中一张抓取到的封面并转为图标字节。 */
+    fun applyCoverCandidate(candidate: CoverCandidate) {
+        viewModelScope.launch {
+            val size = _state.value.iconSize
+            val bytes = withContext(Dispatchers.IO) {
+                val tmp = File(getApplication<Application>().cacheDir, "cover_dl.png")
+                val file = CoverFetcher.download(candidate.coverUrl, tmp) ?: return@withContext null
+                IconProcessor.loadAndResize(getApplication(), android.net.Uri.fromFile(file), size)
+            }
+            _state.value = if (bytes == null) {
+                _state.value.copy(iconError = "封面下载失败")
+            } else {
+                _state.value.copy(iconBytes = bytes, iconUri = null, iconError = null, coverCandidates = emptyList())
+            }
+        }
     }
 
     /** 开始构建。 */

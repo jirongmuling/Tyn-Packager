@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- 抓取游戏封面（VNDB 公开 API） -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <!-- 读取 Tyranor 游戏库（只读共享接口） -->
     <uses-permission android:name="com.tyranor.next.permission.READ_GAME_LIBRARY" />
 
@@ -36,6 +39,17 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.TynPackager"
         tools:targetApi="31">
+
+        <!-- 输出 APK 分享/安装所需的文件共享 -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <activity
             android:name=".ui.MainActivity"
