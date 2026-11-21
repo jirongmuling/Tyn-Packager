@@ -28,6 +28,8 @@ data class BuildRequest(
     val iconByDensity: Map<String, ByteArray>? = null,
     /** 游戏资源在 APK 内的存放前缀。 */
     val assetPrefix: String = DEFAULT_ASSET_PREFIX,
+    /** 启动目标文件（如 data.xp3），写入元数据供运行时使用。 */
+    val launchTarget: String = "",
     /** 是否排除备份/机翻补丁等无关文件（默认排除，见 [AssetFilter]）。 */
     val excludeBackups: Boolean = true,
     /** 签名密钥。 */
@@ -146,6 +148,27 @@ class InstallerBuilder(
                 onProgress = { n, name -> onEmbedProgress(n, name) },
                 filter = { rel, file -> !request.excludeBackups || !AssetFilter.shouldExclude(rel, file) },
             )
+
+            // 写入直装包元数据，供运行时识别游戏信息
+            rewriter.putFile(
+                InstallerMetadata.ASSET_PATH,
+                InstallerMetadata(
+                    title = request.appLabel,
+                    engine = "KIRIKIRI",
+                    launchTarget = request.launchTarget,
+                    packageName = request.packageName,
+                    assetPrefix = request.assetPrefix,
+                    builtAt = System.currentTimeMillis(),
+                    originalPath = request.gameDir.absolutePath,
+                    embeddedFiles = embedded,
+                ).toJsonBytes(),
+            )
+
+            // 校验改造结果：包名必须已生效，否则产物会与他人包冲突
+            val actualPackage = rewriter.originalPackageName()
+            require(actualPackage == request.packageName) {
+                "包名改写失败：期望 ${request.packageName}，实际 $actualPackage"
+            }
 
             val tmp = File(request.outputApk.parentFile, "unsigned.tmp.apk")
             unsigned = tmp

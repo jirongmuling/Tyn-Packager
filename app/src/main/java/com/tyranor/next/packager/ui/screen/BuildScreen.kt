@@ -97,7 +97,7 @@ fun BuildScreen(
         ) {
             Spacer(Modifier.height(2.dp))
 
-            GameInfoCard(state)
+            GameInfoCard(state, onToggleExcludeBackups)
             BasicInfoCard(state, onPackageNameChange, onAppLabelChange)
             IconCard(
                 state = state,
@@ -146,7 +146,7 @@ fun BuildScreen(
 }
 
 @Composable
-private fun GameInfoCard(state: BuildUiState) {
+private fun GameInfoCard(state: BuildUiState, onToggleExcludeBackups: () -> Unit) {
     val game = state.game ?: return
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
@@ -158,6 +158,11 @@ private fun GameInfoCard(state: BuildUiState) {
                 text = game.path ?: "路径未知",
                 style = MaterialTheme.typography.bodySmall,
                 fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = "引擎：${game.engineDisplay}",
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (game.launchTarget.isNotBlank()) {

@@ -414,6 +414,7 @@ class BuildViewModel(app: Application) : AndroidViewModel(app) {
                         appLabel = s.appLabel,
                         iconPng = s.iconBytes,
                         iconByDensity = s.iconByDensity,
+                        launchTarget = game.launchTarget,
                         excludeBackups = s.excludeBackups,
                         signingKey = key,
                     ),

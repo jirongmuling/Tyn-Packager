@@ -16,7 +16,7 @@ import java.util.Locale
  * - 只记录打包相关事件，不记录任何个人数据；
  * - 写操作静默失败（日志本身不应影响主流程）。
  */
-class BuildLogger(context: Context) {
+class BuildLogger(private val context: Context) {
 
     private val file: File
         get() = File(File(context.filesDir, "packager"), "build.log")
