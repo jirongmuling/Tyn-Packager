@@ -5,7 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.tyranor.next.packager.PackagerApp
-import com.tyranor.next.packager.apk.ApkRewriter
+import com.tyranor.next.packager.apk.ApkPackageRules
 import com.tyranor.next.packager.apk.BuildRequest
 import com.tyranor.next.packager.apk.BuildResult
 import com.tyranor.next.packager.apk.BuildStage
