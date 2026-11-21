@@ -125,6 +125,7 @@ private fun SettingsRoute(
     onBack: () -> Unit,
     onRequestAllFilesAccess: () -> Unit,
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val vm: SettingsViewModel = viewModel()
     val state by vm.state.collectAsStateWithLifecycle()
 
@@ -137,6 +138,18 @@ private fun SettingsRoute(
         onClearOutputs = vm::clearOutputs,
         onResetOnboarding = vm::resetOnboarding,
         onRequestAllFilesAccess = onRequestAllFilesAccess,
+        onLoadLog = vm::loadLog,
+        onClearLog = vm::clearLog,
+        onShareLog = {
+            val file = vm.logFile()
+            if (file.isFile) {
+                ApkOutput.shareFile(context, file, "text/plain").onFailure {
+                    android.widget.Toast
+                        .makeText(context, "无法分享日志：${it.message}", android.widget.Toast.LENGTH_LONG)
+                        .show()
+                }
+            }
+        },
     )
 }
 
@@ -305,6 +318,7 @@ private fun BuildRoute(
         onKeystorePasswordChange = buildVm::setKeystorePassword,
         onKeystoreAliasChange = buildVm::setKeystoreAlias,
         onVerifyKeystore = buildVm::verifyKeystore,
+        onToggleExcludeBackups = buildVm::toggleExcludeBackups,
         onBuild = buildVm::build,
         onInstall = { apk -> installWithCheck(context, apk, state.packageName) },
         onShare = { apk ->

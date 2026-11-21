@@ -139,19 +139,29 @@ class ApkRewriter(private val sourceApk: File) : java.io.Closeable {
         prefix: String,
         dir: File,
         onProgress: ((Int, String) -> Unit)? = null,
+        filter: ((relativePath: String, file: File) -> Boolean)? = null,
     ): Int {
         if (!dir.isDirectory) return 0
         val normalizedPrefix = prefix.trimEnd('/') + "/"
         var count = 0
         dir.walkTopDown()
+            .onEnter { it != dir && (filter == null || filter(it.name + "/", it)) }
             .filter { it.isFile }
+            .filter { file ->
+                val rel = file.relativeTo(dir).invariantSeparatorsPath
+                filter?.invoke(rel, file) ?: true
+            }
             .forEach { file ->
                 val rel = file.relativeTo(dir).invariantSeparatorsPath
                 val entryName = normalizedPrefix + rel
                 val map = module.zipEntryMap
                 runCatching { map.remove(entryName) }
                 map.add(
-                    FileInputSource(file, entryName).apply { setMethod(ZipEntry.DEFLATED) },
+                    FileInputSource(file, entryName).apply {
+                        // 已压缩格式（xp3/zip/png 等）再 deflate 几乎无收益，还拖慢打包：
+                        // 直接 STORED。其余文件用 DEFLATED。
+                        setMethod(if (isPrecompressed(rel)) ZipEntry.STORED else ZipEntry.DEFLATED)
+                    },
                 )
                 count++
                 onProgress?.invoke(count, rel)
@@ -183,6 +193,24 @@ class ApkRewriter(private val sourceApk: File) : java.io.Closeable {
 
     companion object {
         private const val ICON_FALLBACK_PATH = "res/mipmap-xxhdpi/ic_launcher.png"
+
+        /**
+         * 是否属于「已压缩」格式。
+         *
+         * 这类文件再次 deflate 收益极低（往往 <1%），却要付出完整压缩耗时，
+         * 大游戏目录下差异可达数十秒。用 STORED 直接存储更划算。
+         */
+        internal fun isPrecompressed(name: String): Boolean {
+            val lower = name.lowercase()
+            return PRECOMPRESSED_EXT.any { lower.endsWith(it) }
+        }
+
+        private val PRECOMPRESSED_EXT = listOf(
+            ".xp3", ".zip", ".7z", ".rar", ".gz", ".xz", ".bz2",
+            ".png", ".jpg", ".jpeg", ".webp", ".gif",
+            ".mp3", ".ogg", ".m4a", ".opus", ".flac",
+            ".mp4", ".webm", ".mkv",
+        )
 
         /** 是否可能是启动器图标资源。 */
         internal fun isLauncherIconPath(path: String): Boolean {

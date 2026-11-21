@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -68,6 +69,7 @@ fun BuildScreen(
     onKeystorePasswordChange: (String) -> Unit,
     onKeystoreAliasChange: (String) -> Unit,
     onVerifyKeystore: () -> Unit,
+    onToggleExcludeBackups: () -> Unit,
     onBuild: () -> Unit,
     onInstall: (File) -> Unit,
     onShare: (File) -> Unit,
@@ -172,6 +174,28 @@ private fun GameInfoCard(state: BuildUiState) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            if (state.excludedFiles > 0) {
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = state.excludeBackups,
+                        onCheckedChange = { onToggleExcludeBackups() },
+                    )
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            "排除备份与补丁文件",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            "可排除 ${state.excludedFiles} 个文件，" +
+                                "节省约 ${formatSize(state.excludedBytes)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
             state.dirCheck?.let { check ->
                 Spacer(Modifier.height(2.dp))
                 Text(

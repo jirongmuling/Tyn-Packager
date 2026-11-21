@@ -80,6 +80,24 @@ object ApkOutput {
         uri.toString()
     }.getOrNull()
 
+    /** 分享任意文件（日志等），按 MIME 类型打开选择器。 */
+    fun shareFile(context: Context, file: File, mime: String): Result<Unit> = runCatching {
+        require(file.isFile) { "文件不存在：${file.name}" }
+        val uri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            file,
+        )
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = mime
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(
+            Intent.createChooser(intent, "分享").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }
+
     private fun uriFor(context: Context, apk: File): Uri =
         FileProvider.getUriForFile(
             context,

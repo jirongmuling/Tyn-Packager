@@ -57,6 +57,12 @@ data class BuildUiState(
     val gameDirSize: Long = -1L,
     /** 游戏目录预检结果。 */
     val dirCheck: com.tyranor.next.packager.apk.GameDirCheck? = null,
+    /** 是否排除备份/机翻补丁等无关文件。 */
+    val excludeBackups: Boolean = true,
+    /** 过滤预估：被排除的字节数。 */
+    val excludedBytes: Long = 0,
+    /** 过滤预估：被排除的文件数。 */
+    val excludedFiles: Int = 0,
     // 签名
     val useCustomSigning: Boolean = false,
     val keystorePath: String = "",
@@ -111,12 +117,16 @@ class BuildViewModel(app: Application) : AndroidViewModel(app) {
     private fun computeGameDirSize(game: TyranorGame) {
         val dir = game.path?.let { java.io.File(it) } ?: return
         viewModelScope.launch {
-            val check = withContext(Dispatchers.IO) {
-                com.tyranor.next.packager.apk.GameDirInspector.inspect(dir)
+            val (check, estimate) = withContext(Dispatchers.IO) {
+                val c = com.tyranor.next.packager.apk.GameDirInspector.inspect(dir)
+                val e = com.tyranor.next.packager.apk.AssetFilter.estimate(dir)
+                c to e
             }
             _state.value = _state.value.copy(
                 gameDirSize = check.totalBytes,
                 dirCheck = check,
+                excludedBytes = estimate.second,
+                excludedFiles = estimate.third,
             )
         }
     }
@@ -340,6 +350,11 @@ class BuildViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** 切换是否排除备份文件。 */
+    fun toggleExcludeBackups() {
+        _state.value = _state.value.copy(excludeBackups = !_state.value.excludeBackups)
+    }
+
     /** 开始构建。 */
     fun build() {
         val s = _state.value
@@ -353,6 +368,9 @@ class BuildViewModel(app: Application) : AndroidViewModel(app) {
             )
             return
         }
+
+        val logger = com.tyranor.next.packager.data.BuildLogger(getApplication())
+        logger.log("START", "pkg=${s.packageName} game=${game.title} dir=${game.path}")
 
         _state.value = s.copy(building = true, stage = BuildStage.PREPARING, result = null)
 
@@ -396,6 +414,7 @@ class BuildViewModel(app: Application) : AndroidViewModel(app) {
                         appLabel = s.appLabel,
                         iconPng = s.iconBytes,
                         iconByDensity = s.iconByDensity,
+                        excludeBackups = s.excludeBackups,
                         signingKey = key,
                     ),
                 )
@@ -416,6 +435,21 @@ class BuildViewModel(app: Application) : AndroidViewModel(app) {
                         ),
                     )
                 }
+            }
+
+            when (result) {
+                is BuildResult.Success -> logger.log(
+                    "DONE",
+                    "pkg=${s.packageName} size=${result.apk.length()} " +
+                        "files=${result.embeddedFiles} schemes=${result.signingSchemes}",
+                )
+                is BuildResult.Failure -> logger.logFailure(
+                    packageName = s.packageName,
+                    gameTitle = game.title,
+                    stage = result.stage.display,
+                    error = result.message,
+                    cause = result.cause,
+                )
             }
 
             val check = if (result is BuildResult.Success) {

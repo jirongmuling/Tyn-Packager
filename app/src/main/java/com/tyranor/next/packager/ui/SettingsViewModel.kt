@@ -27,6 +27,8 @@ data class SettingsUiState(
     val tyranorPackage: String = "",
     /** 最近一次操作结果。 */
     val message: String? = null,
+    /** 日志内容（未展开时不读）。 */
+    val logContent: String? = null,
 )
 
 /** 设置页。 */
@@ -99,6 +101,30 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         OnboardingStore(getApplication()).reset()
         _state.value = _state.value.copy(message = "引导已重置，下次启动生效")
     }
+
+    /** 读取日志内容。 */
+    fun loadLog() {
+        viewModelScope.launch {
+            val text = withContext(Dispatchers.IO) {
+                com.tyranor.next.packager.data.BuildLogger(getApplication<Application>()).read()
+            }
+            _state.value = _state.value.copy(logContent = text.ifBlank { "（暂无日志）" })
+        }
+    }
+
+    /** 清空日志。 */
+    fun clearLog() {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                com.tyranor.next.packager.data.BuildLogger(getApplication<Application>()).clear()
+            }
+            _state.value = _state.value.copy(logContent = null, message = "日志已清空")
+        }
+    }
+
+    /** 日志文件路径，供分享使用。 */
+    fun logFile(): java.io.File =
+        com.tyranor.next.packager.data.BuildLogger(getApplication()).logFile()
 
     fun consumeMessage() {
         _state.value = _state.value.copy(message = null)

@@ -28,6 +28,8 @@ data class BuildRequest(
     val iconByDensity: Map<String, ByteArray>? = null,
     /** 游戏资源在 APK 内的存放前缀。 */
     val assetPrefix: String = DEFAULT_ASSET_PREFIX,
+    /** 是否排除备份/机翻补丁等无关文件（默认排除，见 [AssetFilter]）。 */
+    val excludeBackups: Boolean = true,
     /** 签名密钥。 */
     val signingKey: SigningKey,
 ) {
@@ -138,9 +140,12 @@ class InstallerBuilder(
 
             onStage(BuildStage.EMBEDDING)
             rewriter.removeDirectory(request.assetPrefix)
-            val embedded = rewriter.putDirectory(request.assetPrefix, request.gameDir) { n, name ->
-                onEmbedProgress(n, name)
-            }
+            val embedded = rewriter.putDirectory(
+                prefix = request.assetPrefix,
+                dir = request.gameDir,
+                onProgress = { n, name -> onEmbedProgress(n, name) },
+                filter = { rel, file -> !request.excludeBackups || !AssetFilter.shouldExclude(rel, file) },
+            )
 
             val tmp = File(request.outputApk.parentFile, "unsigned.tmp.apk")
             unsigned = tmp

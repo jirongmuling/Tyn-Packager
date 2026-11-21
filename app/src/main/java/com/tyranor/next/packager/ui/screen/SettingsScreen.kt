@@ -36,6 +36,9 @@ fun SettingsScreen(
     onClearOutputs: () -> Unit,
     onResetOnboarding: () -> Unit,
     onRequestAllFilesAccess: () -> Unit,
+    onLoadLog: () -> Unit,
+    onClearLog: () -> Unit,
+    onShareLog: () -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -100,6 +103,33 @@ fun SettingsScreen(
                     )
                     Spacer(Modifier.height(8.dp))
                     OutlinedButton(onClick = onRequestAllFilesAccess) { Text("重新授权") }
+                }
+            }
+
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("运行日志", style = MaterialTheme.typography.labelMedium)
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "记录每次打包的包名、阶段与失败原因，便于排查问题。不含个人数据。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = onLoadLog) { Text("查看") }
+                        OutlinedButton(onClick = onShareLog) { Text("分享") }
+                        OutlinedButton(onClick = onClearLog) { Text("清空") }
+                    }
+                    state.logContent?.let { text ->
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            text.takeLast(4000),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontFamily = FontFamily.Monospace,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
 
