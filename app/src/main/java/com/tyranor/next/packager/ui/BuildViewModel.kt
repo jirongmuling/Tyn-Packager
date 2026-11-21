@@ -43,6 +43,8 @@ data class BuildUiState(
     val coverError: String? = null,
     // 源 APK
     val sourceApkPath: String = "",
+    // 游戏目录体积（字节）；-1 表示尚未计算
+    val gameDirSize: Long = -1L,
     // 运行态
     val building: Boolean = false,
     val stage: BuildStage? = null,
@@ -76,6 +78,20 @@ class BuildViewModel(app: Application) : AndroidViewModel(app) {
             result = null,
         )
         autoDetectSourceApk()
+        computeGameDirSize(game)
+    }
+
+    /** 统计游戏目录体积，用于提示最终包大小。 */
+    private fun computeGameDirSize(game: TyranorGame) {
+        val dir = game.path?.let { java.io.File(it) } ?: return
+        viewModelScope.launch {
+            val size = withContext(Dispatchers.IO) {
+                runCatching {
+                    dir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+                }.getOrDefault(-1L)
+            }
+            _state.value = _state.value.copy(gameDirSize = size)
+        }
     }
 
     fun updatePackageName(value: String) {

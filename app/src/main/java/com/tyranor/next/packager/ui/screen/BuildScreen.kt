@@ -46,6 +46,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.tyranor.next.packager.apk.BuildResult
 import com.tyranor.next.packager.apk.IconSize
+import com.tyranor.next.packager.cover.CoverCandidate
 import com.tyranor.next.packager.apk.BuildStage
 import com.tyranor.next.packager.ui.BuildUiState
 import java.io.File
@@ -60,6 +61,8 @@ fun BuildScreen(
     onPickIcon: () -> Unit,
     onClearIcon: () -> Unit,
     onIconSizeChange: (IconSize) -> Unit,
+    onFetchCover: () -> Unit,
+    onApplyCover: (CoverCandidate) -> Unit,
     onBuild: () -> Unit,
     onInstall: (File) -> Unit,
     onShare: (File) -> Unit,
@@ -88,7 +91,14 @@ fun BuildScreen(
 
             GameInfoCard(state)
             BasicInfoCard(state, onPackageNameChange, onAppLabelChange)
-            IconCard(state, onPickIcon, onClearIcon, onIconSizeChange)
+            IconCard(
+                state = state,
+                onPickIcon = onPickIcon,
+                onClearIcon = onClearIcon,
+                onIconSizeChange = onIconSizeChange,
+                onFetchCover = onFetchCover,
+                onApplyCover = onApplyCover,
+            )
             SigningInfoCard()
 
             OutlinedTextField(
@@ -142,6 +152,13 @@ private fun GameInfoCard(state: BuildUiState) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            if (state.gameDirSize > 0) {
+                Text(
+                    text = "目录大小：${formatSize(state.gameDirSize)}（内嵌后包体接近该值）",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
@@ -187,6 +204,8 @@ private fun IconCard(
     onPickIcon: () -> Unit,
     onClearIcon: () -> Unit,
     onIconSizeChange: (IconSize) -> Unit,
+    onFetchCover: () -> Unit,
+    onApplyCover: (CoverCandidate) -> Unit,
 ) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
@@ -219,6 +238,9 @@ private fun IconCard(
                 Spacer(Modifier.size(16.dp))
                 Column {
                     TextButton(onClick = onPickIcon) { Text("选择图片") }
+                    TextButton(onClick = onFetchCover, enabled = !state.fetchingCover) {
+                        Text(if (state.fetchingCover) "抓取中…" else "按游戏名抓取")
+                    }
                     if (state.iconBytes != null) {
                         TextButton(onClick = onClearIcon) { Text("恢复默认") }
                     }
@@ -227,6 +249,37 @@ private fun IconCard(
             state.iconError?.let {
                 Spacer(Modifier.height(6.dp))
                 Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+            state.coverError?.let {
+                Spacer(Modifier.height(6.dp))
+                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+            if (state.coverCandidates.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
+                Text("抓取结果（点击选用）", style = MaterialTheme.typography.labelSmall)
+                Spacer(Modifier.height(6.dp))
+                state.coverCandidates.take(5).forEach { candidate ->
+                    OutlinedButton(
+                        onClick = { onApplyCover(candidate) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(Modifier.fillMaxWidth()) {
+                            Text(
+                                candidate.title,
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1,
+                            )
+                            if (candidate.developer.isNotBlank()) {
+                                Text(
+                                    "${candidate.developer} · ${candidate.released}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
+                }
             }
             Spacer(Modifier.height(10.dp))
             Text("尺寸", style = MaterialTheme.typography.labelSmall)

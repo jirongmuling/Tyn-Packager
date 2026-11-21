@@ -118,6 +118,8 @@ private fun BuildRoute(
         },
         onClearIcon = buildVm::clearIcon,
         onIconSizeChange = buildVm::setIconSize,
+        onFetchCover = buildVm::fetchCovers,
+        onApplyCover = buildVm::applyCoverCandidate,
         onBuild = buildVm::build,
         onInstall = { apk ->
             ApkOutput.install(context, apk).onFailure {
